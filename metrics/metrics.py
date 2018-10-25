@@ -1,5 +1,8 @@
+#!/usr/bin/python3
+
 import argparse
 import os
+import sys
 import time
 from functools import partial
 from functools import reduce
@@ -63,28 +66,24 @@ def meter(filename: str, weights: str, metrics: str, data: str) -> Metrics:
     return m
 
 
-bad_os_str = r"""
-This script is platform-dependent.
-It can only be run under Microsoft Windows.
-"""
+bad_os_str = r"""This script is platform-dependent.
+It can be run only on Microsoft Windows."""
 
-descr_str = r"""
-This script is designed to automate DIBCO measurement.
+descr_str = r"""This script is designed to automate DIBCO measurement.
 
 It requires DIBCO weights and metrics evaluation tools and data folder
 with pairs of binarized and ground-truth images with following names format:
 \d+_(gt|out).png (1_gt.png, 2_out.png, 33_gt.png, etc).
 
-The result of script are text files in data folder with following names format:
+Output of script are text files in data folder with following names format:
 \d+_res.png (1_res.txt, 33_res.txt) for every image and total_res.png for all folder.
-Result files contain four measures: F-Measure, pseudo F-measure, PSNR and DRD.
-"""
+Result files contain four measures: F-Measure, pseudo F-measure, PSNR and DRD."""
 
 
 def main():
     if system() != 'Windows':
         print(bad_os_str)
-        os.exit(1)
+        sys.exit(1)
 
     parser = argparse.ArgumentParser(prog='metrics.py',
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -96,8 +95,8 @@ def main():
                         help=r'path to metrics evaluation tool (default: %(default)s)')
     parser.add_argument('-d', '--data', type=str, default=r'.\data\\',
                         help=r'path to data (default: .\data\)')
-    parser.add_argument('-t', '--threads', type=int, default=cpu_count(),
-                        help=r'number of threads (default: %(default)s)')
+    parser.add_argument('-p', '--processes', type=int, default=cpu_count(),
+                        help=r'number of processes (default: %(default)s)')
     args = parser.parse_args()
 
     start_time = time.time()
@@ -106,7 +105,7 @@ def main():
         if file.endswith("_gt.png"):
             files.append(file)
     with open(args.data + 'total_res.txt', 'w') as res:
-        total_res = reduce(lambda a, b: a + b, Pool(args.threads).map(
+        total_res = reduce(lambda a, b: a + b, Pool(args.processes).map(
             partial(meter, weights=args.weights, metrics=args.metrics, data=args.data), files))
         n = len(files)
         total_res.fm /= n
