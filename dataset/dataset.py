@@ -5,9 +5,8 @@ import glob
 import os
 import time
 from functools import partial
-from multiprocessing import Pool
-from multiprocessing import cpu_count
-from shutil import copy2
+from multiprocessing import (Pool, cpu_count)
+from shutil import (copy2, rmtree)
 
 import cv2
 import numpy as np
@@ -59,6 +58,8 @@ def main():
                         help=r'x step (default: %(default)s)')
     parser.add_argument('--ystep', type=int, default=256,
                         help=r'y size of image part (default: %(default)s)')
+    parser.add_argument('-g', '--gentrain', action='store_true',
+                        help=r'generate training data')
     parser.add_argument('-p', '--processes', type=int, default=cpu_count(),
                         help=r'number of processes (default: %(default)s)')
     args = parser.parse_args()
@@ -69,12 +70,17 @@ def main():
         files.append(file)
     Pool(args.processes).map(partial(save_parts_of_image, x_size=args.xsize, y_size=args.ysize,
                                      x_step=args.xstep, y_step=args.ystep), files)
-    i = 0
-    for file in glob.iglob(args.data + '**/*_parts/*_gt.png', recursive=True):
-        copy2(file, args.data + 'train/label/' + str(i) + '.png')
-        copy2(file.replace('gt', 'in'), args.data + 'train/image/' + str(i) + '.png')
-        i += 1
-        
+    if args.gentrain:
+        i = 0
+        os.makedirs(args.data + 'train/in', exist_ok=True)
+        os.makedirs(args.data + 'train/gt', exist_ok=True)
+        for file in glob.iglob(args.data + '**/*_parts/*_gt.png', recursive=True):
+            copy2(file.replace('gt', 'in'), args.data + 'train/in/' + str(i) + '.png')
+            copy2(file, args.data + 'train/gt/' + str(i) + '.png')
+            i += 1
+        for file in glob.iglob(args.data + '**/*_parts', recursive=True):
+            rmtree(file)
+
     print("finished in {0:.2f} seconds".format(time.time() - start_time))
 
 
