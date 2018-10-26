@@ -50,13 +50,13 @@ def main():
     parser.add_argument('-v', '--version', action='version', version='%(prog)s v0.1')
     parser.add_argument('-d', '--data', type=str, default=r'./data/',
                         help=r'path to data (default: ./data/)')
-    parser.add_argument('--xsize', type=int, default=256,
+    parser.add_argument('--xsize', type=int, default=128,
                         help=r'x size of image part (default: %(default)s)')
-    parser.add_argument('--ysize', type=int, default=256,
+    parser.add_argument('--ysize', type=int, default=128,
                         help=r'y size of image part (default: %(default)s)')
-    parser.add_argument('--xstep', type=int, default=256,
+    parser.add_argument('--xstep', type=int, default=128,
                         help=r'x step (default: %(default)s)')
-    parser.add_argument('--ystep', type=int, default=256,
+    parser.add_argument('--ystep', type=int, default=128,
                         help=r'y size of image part (default: %(default)s)')
     parser.add_argument('-g', '--gentrain', action='store_true',
                         help=r'generate training data')
