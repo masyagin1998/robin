@@ -7,6 +7,7 @@ import time
 from functools import partial
 from multiprocessing import Pool
 from multiprocessing import cpu_count
+from shutil import copy2
 
 import cv2
 import numpy as np
@@ -26,14 +27,14 @@ def gen_parts_of_image(img: np.array, x_size: int, y_size: int, x_step: int, y_s
 
 
 def save_parts_of_image(file: str, x_size: int, y_size: int, x_step: int, y_step: int):
-    os.mkdir(file[:len(file) - 7])
-    print(file)
-    in_parts = gen_parts_of_image(cv2.imread(file.replace('gt', 'in'), cv2.COLOR_RGB2GRAY),
+    dirname = file[:len(file) - 7] + '_parts'
+    os.mkdir(dirname)
+    in_parts = gen_parts_of_image(cv2.cvtColor(cv2.imread(file.replace('gt', 'in')), cv2.COLOR_BGR2GRAY),
                                   x_size, y_size, x_step, y_step)
     gt_parts = gen_parts_of_image(cv2.imread(file), x_size, y_size, x_step, y_step)
     for i in range(len(in_parts)):
-        cv2.imwrite(file[:len(file) - 7] + '/' + str(i) + '_in.png', in_parts[i])
-        cv2.imwrite(file[:len(file) - 7] + '/' + str(i) + '_gt.png', gt_parts[i])
+        cv2.imwrite(dirname + '/' + str(i) + '_in.png', in_parts[i])
+        cv2.imwrite(dirname + '/' + str(i) + '_gt.png', gt_parts[i])
 
 
 descr_str = r"""
@@ -68,6 +69,12 @@ def main():
         files.append(file)
     Pool(args.processes).map(partial(save_parts_of_image, x_size=args.xsize, y_size=args.ysize,
                                      x_step=args.xstep, y_step=args.ystep), files)
+    i = 0
+    for file in glob.iglob(args.data + '**/*_parts/*_gt.png', recursive=True):
+        copy2(file, args.data + 'train/label/' + str(i) + '.png')
+        copy2(file.replace('gt', 'in'), args.data + 'train/image/' + str(i) + '.png')
+        i += 1
+        
     print("finished in {0:.2f} seconds".format(time.time() - start_time))
 
 
