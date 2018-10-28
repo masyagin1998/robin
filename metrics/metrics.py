@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import argparse
+import glob
 import os
 import sys
 import time
@@ -38,19 +39,21 @@ class Metrics:
             self.fm, self.pfm, self.psnr, self.drd)
 
 
-def meter(filename: str, weights: str, metrics: str, data: str) -> Metrics:
-    os.system(weights + ' ' + data + filename + " > NUL")
+def meter(fname_out: str, weights: str, metrics: str, data: str) -> Metrics:
+    """Meter F-Measure, pseudo F-Measure, PSNR and DRD of your binarization."""
+    fname_gt = fname_out.replace('_out', '_gt')
+    fname_res = fname_gt[:fname_gt.rfind('_gt')] + '_res.txt'
+    os.system(weights + ' ' + os.path.join(data, fname_gt) + " > NUL")
     os.system(metrics + ' ' +
-              data + filename + ' ' +
-              data + filename.replace('gt', 'out') + ' ' +
-              data + filename.replace('.png', '_RWeights.dat') + ' ' +
-              data + filename.replace('.png', '_PWeights.dat') + ' ' +
-              '> ' + data + filename.replace('gt.png', 'res.txt'))
-    os.remove(data + filename.replace('.png', '_RWeights.dat'))
-    os.remove(data + filename.replace('.png', '_PWeights.dat'))
+              os.path.join(data, fname_gt) + ' ' +
+              os.path.join(data, fname_out) + ' ' +
+              os.path.join(data, fname_gt[:fname_gt.rfind('.')] + '_RWeights.dat') + ' ' +
+              os.path.join(data, fname_gt[:fname_gt.rfind('.')] + '_PWeights.dat') + ' ' +
+              '> ' + os.path.join(data, fname_res))
+    os.remove(os.path.join(data, fname_gt[:fname_gt.rfind('.')] + '_RWeights.dat'))
+    os.remove(os.path.join(data, fname_gt[:fname_gt.rfind('.')] + '_PWeights.dat'))
     m = Metrics()
-    res_name = data + filename.replace("gt.png", "res.txt")
-    with open(res_name, 'r') as res:
+    with open(os.path.join(data, fname_res), 'r') as res:
         dot_num_regexp = r'\d+\.\d+'
         for line in res:
             if 'pseudo F-Measure (Fps)' in line:
@@ -61,58 +64,61 @@ def meter(filename: str, weights: str, metrics: str, data: str) -> Metrics:
                 m.psnr = float(search(dot_num_regexp, line).group(0))
             elif 'DRD' in line:
                 m.drd = float(search(dot_num_regexp, line).group(0))
-    with open(res_name, 'w') as res:
+    with open(os.path.join(data, fname_res), 'w') as res:
         res.write(str(m))
     return m
 
 
-bad_os_str = r"""This script is platform-dependent.
-It can be run only on Microsoft Windows."""
+bad_os_str = r"""This script is platform-dependent. It can be run only on Microsoft Windows."""
 
-descr_str = r"""This script is designed to automate DIBCO measurement.
+desc_str = r"""Meter quality of your binarization.
 
-It requires DIBCO weights and metrics evaluation tools and data folder
-with pairs of binarized and ground-truth images with following names format:
-\d+_(gt|out).png (1_gt.png, 2_out.png, 33_gt.png, etc).
+Only for Microsoft Windows.
 
-Output of script are text files in data folder with following names format:
-\d+_res.png (1_res.txt, 33_res.txt) for every image and total_res.png for all folder.
-Result files contain four measures: F-Measure, pseudo F-measure, PSNR and DRD."""
+Script requires DIBCO weights and metrics evaluation tools and
+directory with input binarized and ground-truth images.
+All binarized image names should end with "_out" like "1_out.png".
+All ground-truth image should end with "_gt" like "1_gt.png".
+After script finishes, in the output directory there will be metrics files
+wtih four measures: F-Measure, pseudo F-Measure, PSNR and DRD.
+
+"""
 
 
 def main():
+    start_time = time.time()
+
     if system() != 'Windows':
         print(bad_os_str)
         sys.exit(1)
 
-    parser = argparse.ArgumentParser(prog='metrics.py',
+    parser = argparse.ArgumentParser(prog='metrics',
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
-                                     description=descr_str)
+                                     description=desc_str)
     parser.add_argument('-v', '--version', action='version', version='%(prog)s v0.1')
-    parser.add_argument('-w', '--weights', type=str, default=r'.\weights\weights.exe',
+    parser.add_argument('-w', '--weights', type=str, default=r'./weights/weights.exe',
                         help=r'path to weights evaluation tool (default: %(default)s)')
-    parser.add_argument('-m', '--metrics', type=str, default=r'.\metrics\metrics.exe',
+    parser.add_argument('-m', '--metrics', type=str, default=r'./metrics/metrics.exe',
                         help=r'path to metrics evaluation tool (default: %(default)s)')
-    parser.add_argument('-d', '--data', type=str, default=r'.\data\\',
-                        help=r'path to data (default: .\data\)')
+    parser.add_argument('-i', '--input', type=str, default=r'./input/',
+                        help=r'directory with input binarized and ground-truth images (default: "%(default)s")')
+    parser.add_argument('-o', '--output', type=str, default=r'./output/',
+                        help=r'directory with output metrics files (default: "%(default)s")')
     parser.add_argument('-p', '--processes', type=int, default=cpu_count(),
                         help=r'number of processes (default: %(default)s)')
     args = parser.parse_args()
 
-    start_time = time.time()
-    files = []
-    for file in os.listdir(args.data):
-        if file.endswith("_gt.png"):
-            files.append(file)
+    fnames_out = list(glob.iglob(os.path.join(args.input, '**/*_out.*'), recursive=True))
     with open(args.data + 'total_res.txt', 'w') as res:
         total_res = reduce(lambda a, b: a + b, Pool(args.processes).map(
-            partial(meter, weights=args.weights, metrics=args.metrics, data=args.data), files))
-        n = len(files)
+            partial(meter, weights=args.weights, metrics=args.metrics, data=args.data), fnames_out))
+        n = len(fnames_out)
         total_res.fm /= n
         total_res.pfm /= n
         total_res.psnr /= n
         total_res.drd /= n
         res.write(str(total_res))
+
     print("finished in {0:.2f} seconds".format(time.time() - start_time))
 
 

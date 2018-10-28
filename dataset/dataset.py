@@ -4,7 +4,6 @@ import argparse
 import glob
 import os
 import time
-from functools import partial
 from multiprocessing import (Pool, cpu_count)
 from shutil import (copy2, rmtree)
 
@@ -12,82 +11,112 @@ import cv2
 import numpy as np
 
 
-def gen_parts_of_image(img: np.array, x_size: int, y_size: int, x_step: int, y_step: int) -> [np.array]:
+def split_img_overlay(img: np.array, size_x: int = 128, size_y: int = 128, step_x: int = 128, step_y: int = 128) -> [
+    np.array]:
+    """Split image to parts (little images) with possible overlay.
+
+    Walk through the whole image by the window of size size_x * size_y with step step_x, step_y and
+    save all parts in list. If the image sizes are not multiples of the window sizes,
+    the image will be complemented by a frame of suitable size. If step_x, step_y are not equal to
+    size_x, size_y, parts overlay each other, or have spaces between each other.
+
+    """
     max_y, max_x = img.shape[:2]
-    if max_y % y_size != 0:
-        border_y = (y_size - (max_y % y_size) + 1) // 2
+    border_y = 0
+    if max_y % size_y != 0:
+        border_y = (size_y - (max_y % size_y) + 1) // 2
         img = cv2.copyMakeBorder(img, border_y, border_y, 0, 0, cv2.BORDER_CONSTANT, value=[255, 255, 255])
         max_y = img.shape[0]
-    if max_x % x_size != 0:
-        border_x = (x_size - (max_x % x_size) + 1) // 2
+    border_x = 0
+    if max_x % size_x != 0:
+        border_x = (size_x - (max_x % size_x) + 1) // 2
         img = cv2.copyMakeBorder(img, 0, 0, border_x, border_x, cv2.BORDER_CONSTANT, value=[255, 255, 255])
         max_x = img.shape[1]
 
     parts = []
     curr_y = 0
-    while (curr_y + y_size) <= max_y:
+    while (curr_y + size_y) <= max_y:
         curr_x = 0
-        while (curr_x + x_size) <= max_x:
-            parts.append(img[curr_y:curr_y + y_size, curr_x:curr_x + x_size])
-            curr_x += x_step
-        curr_y += y_step
-    return parts
+        while (curr_x + size_x) <= max_x:
+            parts.append(img[curr_y:curr_y + size_y, curr_x:curr_x + size_x])
+            curr_x += step_x
+        curr_y += step_y
+    return parts, border_y, border_x
 
 
-def save_parts_of_image(file: str, x_size: int, y_size: int, x_step: int, y_step: int):
-    dirname = file[:len(file) - 7] + '_parts'
-    os.mkdir(dirname)
-    in_parts = gen_parts_of_image(cv2.cvtColor(cv2.imread(file.replace('gt', 'in')), cv2.COLOR_BGR2GRAY),
-                                  x_size, y_size, x_step, y_step)
-    gt_parts = gen_parts_of_image(cv2.imread(file), x_size, y_size, x_step, y_step)
-    for i in range(len(in_parts)):
-        cv2.imwrite(dirname + '/' + str(i) + '_in.png', in_parts[i])
-        cv2.imwrite(dirname + '/' + str(i) + '_gt.png', gt_parts[i])
+def save_imgs(imgs_in: [np.array], imgs_gt: [np.array], fname_in: str):
+    """Save image parts to one folder.
+
+    Save all image parts to folder with name '(original image name) + _parts'.
+
+    """
+    dname = os.path.join(fname_in[:fname_in.rfind('_in')] + '_parts')
+    mkdir_s(dname)
+    for i, img in enumerate(imgs_in):
+        cv2.imwrite(os.path.join(dname, str(i) + '_in.png'), img)
+    for i, img in enumerate(imgs_gt):
+        cv2.imwrite(os.path.join(dname, str(i) + '_gt.png'), img)
 
 
-descr_str = r"""
-This script is designed to automate generating document image datasets.
+def process_img(fname_in, size_x: int = 128, size_y: int = 128, step_x: int = 128, step_y: int = 128):
+    """Read train and groun_truth images, split them and save."""
+    img_in = cv2.imread(fname_in)
+    parts_in, _, _ = split_img_overlay(img_in, size_x, size_y, step_x, step_y)
+    img_gt = cv2.imread(fname_in.replace('_in', '_gt'))
+    parts_gt, _, _ = split_img_overlay(img_gt, size_x, size_y, step_x, step_y)
+    save_imgs(parts_in, parts_gt, fname_in)
 
-It requires data folder with pairs of original and ground-truth images with following names format:
-\d+_(gt|out).png (1_gt.png, 2_in.png, 33_gt.png, etc)."""
+
+def mkdir_s(path: str):
+    """Create directory in specified path, if not exists."""
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+
+desc_str = r"""Create train and ground-truth images suitable for U-net from your dataset.
+
+All train image names should end with "_in" like "1_in.png".
+All ground-truth image should end with "_gt" like "1_gt.png".
+If for some image there is only train or ground-truth version, script fails.
+After script finishes, in the output directory there will be two subdirectories:
+"in" with train images and "gt" with ground-truth images.
+
+"""
 
 
 def main():
     start_time = time.time()
+
     parser = argparse.ArgumentParser(prog='dataset',
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
-                                     description=descr_str)
+                                     description=desc_str)
     parser.add_argument('-v', '--version', action='version', version='%(prog)s v0.1')
-    parser.add_argument('-d', '--data', type=str, default=r'./data/',
-                        help=r'path to data (default: ./data/)')
-    parser.add_argument('--xsize', type=int, default=128,
+    parser.add_argument('-i', '--input', type=str, default=r'./input/',
+                        help=r'directory with input train and ground-truth images (default: "%(default)s")')
+    parser.add_argument('-o', '--output', type=str, default=r'./output/',
+                        help=r'directory for output train and ground-truth images suitable for U-net (default: "%(default)s")')
+    parser.add_argument('--size_x', type=int, default=128,
                         help=r'x size of image part (default: %(default)s)')
-    parser.add_argument('--ysize', type=int, default=128,
+    parser.add_argument('--size_y', type=int, default=128,
                         help=r'y size of image part (default: %(default)s)')
-    parser.add_argument('--xstep', type=int, default=128,
+    parser.add_argument('--step_x', type=int, default=128,
                         help=r'x step (default: %(default)s)')
-    parser.add_argument('--ystep', type=int, default=128,
+    parser.add_argument('--step_y', type=int, default=128,
                         help=r'y size of image part (default: %(default)s)')
-    parser.add_argument('-g', '--gentrain', action='store_true',
-                        help=r'generate training data')
     parser.add_argument('-p', '--processes', type=int, default=cpu_count(),
                         help=r'number of processes (default: %(default)s)')
     args = parser.parse_args()
 
-    files = []
-    for file in glob.iglob(args.data + '**/*_gt.png', recursive=True):
-        files.append(file)
-    Pool(args.processes).map(partial(save_parts_of_image, x_size=args.xsize, y_size=args.ysize,
-                                     x_step=args.xstep, y_step=args.ystep), files)
-    if args.gentrain:
-        i = 0
-        os.mkdir(args.data + 'dataset')
-        for file in glob.iglob(args.data + '**/*_parts/*_gt.png', recursive=True):
-            copy2(file.replace('gt', 'in'), args.data + 'dataset/' + str(i) + '_in.png')
-            copy2(file, args.data + 'dataset/' + str(i) + '_gt.png')
-            i += 1
-        for file in glob.iglob(args.data + '**/*_parts', recursive=True):
-            rmtree(file)
+    fnames_in = list(glob.iglob(os.path.join(args.input, '**/*_in.*'), recursive=True))
+    Pool(args.processes).map(process_img, fnames_in)
+    mkdir_s(os.path.join(args.output))
+    mkdir_s(os.path.join(args.output, 'in'))
+    mkdir_s(os.path.join(args.output, 'gt'))
+    for i, fname in enumerate(glob.iglob(os.path.join(args.input, '**/*_parts/*_in.*'), recursive=True)):
+        copy2(os.path.join(fname), os.path.join(args.output, 'in', str(i) + '_in.png'))
+        copy2(os.path.join(fname.replace('_in', '_gt')), os.path.join(args.output, 'gt', str(i) + '_gt.png'))
+    for dname in glob.iglob(os.path.join(args.input, '**/*_parts'), recursive=True):
+        rmtree(dname)
 
     print("finished in {0:.2f} seconds".format(time.time() - start_time))
 

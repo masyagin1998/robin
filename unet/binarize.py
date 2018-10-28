@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import argparse
+import glob
 import os
 import time
 
@@ -27,6 +28,7 @@ def split_img(img: np.array, size_x: int = 128, size_y: int = 128) -> ([np.array
         border_x = (size_x - (max_x % size_x) + 1) // 2
         img = cv2.copyMakeBorder(img, 0, 0, border_x, border_x, cv2.BORDER_CONSTANT, value=[255, 255, 255])
         max_x = img.shape[1]
+
     parts = []
     curr_y = 0
     while (curr_y + size_y) <= max_y:
@@ -39,7 +41,7 @@ def split_img(img: np.array, size_x: int = 128, size_y: int = 128) -> ([np.array
 
 
 def combine_imgs(imgs: [np.array], border_y: int, border_x: int, max_y: int, max_x: int) -> np.array:
-    """Combine little images to one big image.
+    """Combine image parts to one big image.
 
     Walk through list of images and create from them one big image with sizes max_x * max_y.
     If border_x and border_y are non-zero, they will be removed from created image.
@@ -98,10 +100,10 @@ def main():
                         help=r'path to U-net weights (default: "%(default)s")')
     args = parser.parse_args()
 
-    fnames = os.listdir(args.input)
-    if len(fnames) != 0:
+    fnames_in = list(glob.iglob(os.path.join(args.input, '**/*_in.*'), recursive=True))
+    if len(fnames_in) != 0:
         mkdir_s(args.output)
-    for fname in fnames:
+    for fname in fnames_in:
         img = cv2.cvtColor(cv2.imread(os.path.join(args.input, fname)), cv2.COLOR_BGR2GRAY)
         parts, border_y, border_x = split_img(img)
         parts = np.array(parts)
