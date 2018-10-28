@@ -8,6 +8,8 @@ import time
 import cv2
 import numpy as np
 
+from model.unet import unet
+
 
 def split_img(img: np.array, size_x: int = 128, size_y: int = 128) -> ([np.array], int, int):
     """Split image to parts (little images).
@@ -51,7 +53,7 @@ def combine_imgs(imgs: [np.array], border_y: int, border_x: int, max_y: int, max
     """
     max_y += (border_y * 2)
     max_x += (border_x * 2)
-    img = np.zeros((max_y, max_x), np.uint8)
+    img = np.zeros((max_y, max_x), np.float)
     size_y, size_x = imgs[0].shape
     curr_y = 0
     i = 0
@@ -96,21 +98,35 @@ def main():
                         help=r'directory with input images (default: "%(default)s")')
     parser.add_argument('-o', '--output', type=str, default=r'./output/',
                         help=r'directory for output images (default: "%(default)s")')
-    parser.add_argument('-w', '--weights', type=str, default=r'./bin_weights.hdf5',
+    parser.add_argument('-w', '--weights', type=str, default=r'./bin_weights.h5',
                         help=r'path to U-net weights (default: "%(default)s")')
     args = parser.parse_args()
 
     fnames_in = list(glob.iglob(os.path.join(args.input, '**/*_in.*'), recursive=True))
+    model = None
     if len(fnames_in) != 0:
         mkdir_s(args.output)
+        model = unet()
+        model.load_weights(args.weights)
     for fname in fnames_in:
-        img = cv2.cvtColor(cv2.imread(os.path.join(args.input, fname)), cv2.COLOR_BGR2GRAY)
+        img = cv2.cvtColor(cv2.imread(os.path.join(
+            fname)), cv2.COLOR_BGR2GRAY)
         parts, border_y, border_x = split_img(img)
+        for i in range(len(parts)):
+            parts[i] = parts[i] / 255
         parts = np.array(parts)
         parts.shape = (parts.shape[0], parts.shape[1], parts.shape[2], 1)
-        parts.shape = (parts.shape[0], parts.shape[1], parts.shape[2])
+        parts = model.predict(parts, 20)
+        tmp = []
+        for part in parts:
+            part.shape = (128, 128)
+            tmp.append(part)
+        parts = tmp
         img = combine_imgs(parts, border_y, border_x, img.shape[0], img.shape[1])
-        cv2.imwrite(os.path.join(args.output, '{}_out.png'.format(fname[:fname.rfind('_in.')])), img)
+        img = img * 255
+        img = img.astype(np.uint8)
+        # _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        cv2.imwrite('kek.png', img)
 
     print("finished in {0:.2f} seconds".format(time.time() - start_time))
 

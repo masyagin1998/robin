@@ -4,6 +4,7 @@ import argparse
 import glob
 import os
 import time
+from functools import partial
 from multiprocessing import (Pool, cpu_count)
 from shutil import (copy2, rmtree)
 
@@ -60,9 +61,9 @@ def save_imgs(imgs_in: [np.array], imgs_gt: [np.array], fname_in: str):
 
 def process_img(fname_in, size_x: int = 128, size_y: int = 128, step_x: int = 128, step_y: int = 128):
     """Read train and groun_truth images, split them and save."""
-    img_in = cv2.imread(fname_in)
+    img_in = cv2.cvtColor(cv2.imread(fname_in), cv2.COLOR_BGR2GRAY)
     parts_in, _, _ = split_img_overlay(img_in, size_x, size_y, step_x, step_y)
-    img_gt = cv2.imread(fname_in.replace('_in', '_gt'))
+    img_gt = cv2.cvtColor(cv2.imread(fname_in.replace('_in', '_gt')), cv2.COLOR_BGR2GRAY)
     parts_gt, _, _ = split_img_overlay(img_gt, size_x, size_y, step_x, step_y)
     save_imgs(parts_in, parts_gt, fname_in)
 
@@ -108,7 +109,8 @@ def main():
     args = parser.parse_args()
 
     fnames_in = list(glob.iglob(os.path.join(args.input, '**/*_in.*'), recursive=True))
-    Pool(args.processes).map(process_img, fnames_in)
+    f = partial(process_img, size_x=args.size_x, size_y=args.size_y, step_x=args.step_y, step_y=args.step_y)
+    Pool(args.processes).map(f, fnames_in)
     mkdir_s(os.path.join(args.output))
     mkdir_s(os.path.join(args.output, 'in'))
     mkdir_s(os.path.join(args.output, 'gt'))
