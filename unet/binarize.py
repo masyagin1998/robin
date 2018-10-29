@@ -62,7 +62,10 @@ def combine_imgs(imgs: [np.array], border_y: int, border_x: int, max_y: int, max
     while (curr_y + size_y) <= max_y + border_y * 2:
         curr_x = 0
         while (curr_x + size_x) <= max_x + border_x * 2:
-            img[curr_y:curr_y + size_y, curr_x:curr_x + size_x] = imgs[i]
+            try:
+                img[curr_y:curr_y + size_y, curr_x:curr_x + size_x] = imgs[i]
+            except:
+                i -= 1
             i += 1
             curr_x += size_x
         curr_y += size_y
@@ -111,9 +114,7 @@ def main():
         model = unet()
         model.load_weights(args.weights)
     for fname in fnames_in:
-        # TODO: read grayscale
-        img = cv2.cvtColor(cv2.imread(os.path.join(
-            fname)), cv2.COLOR_BGR2GRAY)
+        img = cv2.imread(os.path.join(fname), cv2.IMREAD_GRAYSCALE)
         parts, border_y, border_x = split_img(img)
         for i in range(len(parts)):
             parts[i] = parts[i] / 255
@@ -128,8 +129,8 @@ def main():
         img = combine_imgs(parts, border_y, border_x, img.shape[0], img.shape[1])
         img = img * 255
         img = img.astype(np.uint8)
-        # _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        cv2.imwrite('kek.png', img)
+        _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        cv2.imwrite(os.path.join(args.output, os.path.split(fname)[-1].replace('_in', '_out')), img)
 
     print("finished in {0:.2f} seconds".format(time.time() - start_time))
 

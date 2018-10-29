@@ -7,6 +7,7 @@ import time
 
 import matplotlib.pyplot as plt
 import numpy as np
+from keras.callbacks import ModelCheckpoint
 from keras.preprocessing.image import ImageDataGenerator
 
 from model.unet import unet
@@ -89,9 +90,9 @@ def main():
     parser.add_argument('-w', '--weights', type=str, default=os.path.join('.', 'bin_weights.hdf5'),
                         help=r'output U-net weights file (default: "%(default)s")')
     parser.add_argument('--train', type=int, default=80,
-                        help=r'% of train images (default: %(default)s%)')
+                        help=r'%% of train images (default: %(default)s%%)')
     parser.add_argument('--val', type=int, default=20,
-                        help=r'% of validation images (default: %(default)s%)')
+                        help=r'%% of validation images (default: %(default)s%%)')
     parser.add_argument('-e', '--epochs', type=int, default=1,
                         help=r'number of training epochs (default: %(default)s)')
     parser.add_argument('-b', '--batchsize', type=int, default=20,
@@ -115,15 +116,17 @@ def main():
     validation_generator = gen_data(validation_dir, input, validation_start, validation_stop, args.batchsize)
 
     model = unet()
+    model_checkpoint = ModelCheckpoint(args.weights, monitor='val_acc', verbose=1,
+                                       save_best_only=True, save_weights_only=True)
     history = model.fit_generator(
         train_generator,
         steps_per_epoch=(train_stop - train_start + 1) / args.batchsize,
         epochs=args.epochs,
         validation_data=validation_generator,
-        validation_steps=(validation_stop - validation_start + 1) / args.batchsize
+        validation_steps=(validation_stop - validation_start + 1) / args.batchsize,
+        callbacks=[model_checkpoint]
     )
-
-    model.save_weights(args.weights)
+    model.save_weights('heh.hdf5')
 
     acc = history.history['acc']
     val_acc = history.history['val_acc']
