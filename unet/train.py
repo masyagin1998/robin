@@ -5,6 +5,7 @@ import os
 import shutil
 import time
 
+import matplotlib.pyplot as plt
 import numpy as np
 from keras.preprocessing.image import ImageDataGenerator
 
@@ -20,7 +21,7 @@ def adjustData(img, mask):
     return (img, mask)
 
 
-def gen_data(dname: str, dataset_dname: str, start: int, stop: int):
+def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: int):
     os.mkdir(dname)
     dir_in = os.path.join(dname, 'in')
     os.mkdir(dir_in)
@@ -39,7 +40,7 @@ def gen_data(dname: str, dataset_dname: str, start: int, stop: int):
         dname,
         classes=['in'],
         target_size=(128, 128),
-        batch_size=20,
+        batch_size=batch_size,
         class_mode=None,
         color_mode='grayscale',
         seed=1
@@ -49,7 +50,7 @@ def gen_data(dname: str, dataset_dname: str, start: int, stop: int):
         dname,
         classes=['gt'],
         target_size=(128, 128),
-        batch_size=20,
+        batch_size=batch_size,
         class_mode=None,
         color_mode='grayscale',
         seed=1
@@ -87,8 +88,14 @@ def main():
                         help=r'directory for temporary training files. It will be deleted after script finishes (default: "%(default)s")')
     parser.add_argument('-w', '--weights', type=str, default=os.path.join('.', 'bin_weights.hdf5'),
                         help=r'output U-net weights file (default: "%(default)s")')
-    parser.add_argument('--train', type=int, default=80, help=r'% of train images (default: %(default)s%)')
-    parser.add_argument('--val', type=int, default=20, help=r'% of validation images (default: %(default)s%)')
+    parser.add_argument('--train', type=int, default=80,
+                        help=r'% of train images (default: %(default)s%)')
+    parser.add_argument('--val', type=int, default=20,
+                        help=r'% of validation images (default: %(default)s%)')
+    parser.add_argument('-e', '--epochs', type=int, default=1,
+                        help=r'number of training epochs (default: %(default)s)')
+    parser.add_argument('-b', '--batchsize', type=int, default=20,
+                        help=r'number of images, simultaneously sent to the GPU (default: %(default)s)')
     args = parser.parse_args()
 
     input = args.input
@@ -100,23 +107,41 @@ def main():
     train_dir = os.path.join(tmp, 'train')
     train_start = 0
     train_stop = int(input_size * (args.train / 100))
-    train_generator = gen_data(train_dir, input, train_start, train_stop)
+    train_generator = gen_data(train_dir, input, train_start, train_stop, args.batchsize)
 
     validation_dir = os.path.join(tmp, 'validation')
     validation_start = train_stop
     validation_stop = input_size
-    validation_generator = gen_data(validation_dir, input, validation_start, validation_stop)
+    validation_generator = gen_data(validation_dir, input, validation_start, validation_stop, args.batchsize)
 
     model = unet()
-    model.fit_generator(
+    history = model.fit_generator(
         train_generator,
-        steps_per_epoch=100,
-        epochs=3,
+        steps_per_epoch=(train_stop - train_start + 1) / args.batchsize,
+        epochs=args.epochs,
         validation_data=validation_generator,
-        validation_steps=30
+        validation_steps=(validation_stop - validation_start + 1) / args.batchsize
     )
 
     model.save_weights(args.weights)
+
+    acc = history.history['acc']
+    val_acc = history.history['val_acc']
+    loss = history.history['loss']
+    val_loss = history.history['val_loss']
+    epochs = range(1, len(acc) + 1)
+
+    plt.plot(epochs, acc, 'bo', label='Training accuracy')
+    plt.plot(epochs, val_acc, 'b', label='Validation accuracy')
+    plt.title('Training and Validation accuracy')
+    plt.legend()
+    plt.figure()
+
+    plt.plot(epochs, loss, 'bo', label='Training loss')
+    plt.plot(epochs, val_loss, 'b', label='Validation loss')
+    plt.title('Training and Validation loss')
+    plt.legend()
+    plt.figure()
 
     print("finished in {0:.2f} seconds".format(time.time() - start_time))
 
