@@ -33,6 +33,7 @@ def split_img(img: np.array, size_x: int = 128, size_y: int = 128) -> ([np.array
 
     parts = []
     curr_y = 0
+    # TODO: rewrite with generators.
     while (curr_y + size_y) <= max_y:
         curr_x = 0
         while (curr_x + size_x) <= max_x:
@@ -57,6 +58,7 @@ def combine_imgs(imgs: [np.array], border_y: int, border_x: int, max_y: int, max
     size_y, size_x = imgs[0].shape
     curr_y = 0
     i = 0
+    # TODO: rewrite with generators.
     while (curr_y + size_y) <= max_y + border_y * 2:
         curr_x = 0
         while (curr_x + size_x) <= max_x + border_x * 2:
@@ -109,6 +111,7 @@ def main():
         model = unet()
         model.load_weights(args.weights)
     for fname in fnames_in:
+        # TODO: read grayscale
         img = cv2.cvtColor(cv2.imread(os.path.join(
             fname)), cv2.COLOR_BGR2GRAY)
         parts, border_y, border_x = split_img(img)
