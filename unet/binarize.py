@@ -94,15 +94,15 @@ def main():
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description=desc_str)
     parser.add_argument('-v', '--version', action='version', version='%(prog)s v0.1')
-    parser.add_argument('-i', '--input', type=str, default=r'./input/',
+    parser.add_argument('-i', '--input', type=str, default=os.path.join('.', 'input'),
                         help=r'directory with input images (default: "%(default)s")')
-    parser.add_argument('-o', '--output', type=str, default=r'./output/',
+    parser.add_argument('-o', '--output', type=str, default=os.path.join('.', 'output'),
                         help=r'directory for output images (default: "%(default)s")')
-    parser.add_argument('-w', '--weights', type=str, default=r'./bin_weights.h5',
+    parser.add_argument('-w', '--weights', type=str, default=os.path.join('.', 'bin_weights.hdf5'),
                         help=r'path to U-net weights (default: "%(default)s")')
     args = parser.parse_args()
 
-    fnames_in = list(glob.iglob(os.path.join(args.input, '**/*_in.*'), recursive=True))
+    fnames_in = list(glob.iglob(os.path.join(args.input, '**', '*_in.*'), recursive=True))
     model = None
     if len(fnames_in) != 0:
         mkdir_s(args.output)

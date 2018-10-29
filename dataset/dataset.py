@@ -92,9 +92,9 @@ def main():
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description=desc_str)
     parser.add_argument('-v', '--version', action='version', version='%(prog)s v0.1')
-    parser.add_argument('-i', '--input', type=str, default=r'./input/',
+    parser.add_argument('-i', '--input', type=str, default=os.path.join('.', 'input'),
                         help=r'directory with input train and ground-truth images (default: "%(default)s")')
-    parser.add_argument('-o', '--output', type=str, default=r'./output/',
+    parser.add_argument('-o', '--output', type=str, default=os.path.join('.', 'output'),
                         help=r'directory for output train and ground-truth images suitable for U-net (default: "%(default)s")')
     parser.add_argument('--size_x', type=int, default=128,
                         help=r'x size of image part (default: %(default)s)')
@@ -108,16 +108,16 @@ def main():
                         help=r'number of processes (default: %(default)s)')
     args = parser.parse_args()
 
-    fnames_in = list(glob.iglob(os.path.join(args.input, '**/*_in.*'), recursive=True))
+    fnames_in = list(glob.iglob(os.path.join(args.input, '**', '*_in.*'), recursive=True))
     f = partial(process_img, size_x=args.size_x, size_y=args.size_y, step_x=args.step_y, step_y=args.step_y)
     Pool(args.processes).map(f, fnames_in)
     mkdir_s(os.path.join(args.output))
     mkdir_s(os.path.join(args.output, 'in'))
     mkdir_s(os.path.join(args.output, 'gt'))
-    for i, fname in enumerate(glob.iglob(os.path.join(args.input, '**/*_parts/*_in.*'), recursive=True)):
+    for i, fname in enumerate(glob.iglob(os.path.join(args.input, '**', '*_parts', '*_in.*'), recursive=True)):
         copy2(os.path.join(fname), os.path.join(args.output, 'in', str(i) + '_in.png'))
         copy2(os.path.join(fname.replace('_in', '_gt')), os.path.join(args.output, 'gt', str(i) + '_gt.png'))
-    for dname in glob.iglob(os.path.join(args.input, '**/*_parts'), recursive=True):
+    for dname in glob.iglob(os.path.join(args.input, '**', '*_parts'), recursive=True):
         rmtree(dname)
 
     print("finished in {0:.2f} seconds".format(time.time() - start_time))

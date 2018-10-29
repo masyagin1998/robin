@@ -96,20 +96,20 @@ def main():
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description=desc_str)
     parser.add_argument('-v', '--version', action='version', version='%(prog)s v0.1')
-    parser.add_argument('-w', '--weights', type=str, default=r'./weights/weights.exe',
-                        help=r'path to weights evaluation tool (default: %(default)s)')
-    parser.add_argument('-m', '--metrics', type=str, default=r'./metrics/metrics.exe',
-                        help=r'path to metrics evaluation tool (default: %(default)s)')
-    parser.add_argument('-i', '--input', type=str, default=r'./input/',
+    parser.add_argument('-i', '--input', type=str, default=os.path.join('.', 'input'),
                         help=r'directory with input binarized and ground-truth images (default: "%(default)s")')
-    parser.add_argument('-o', '--output', type=str, default=r'./output/',
+    parser.add_argument('-o', '--output', type=str, default=os.path.join('.', 'output'),
                         help=r'directory with output metrics files (default: "%(default)s")')
-    parser.add_argument('-p', '--processes', type=int, default=cpu_count(),
+    parser.add_argument('-w', '--weights', type=str, default=os.path.join('weights', 'weights.exe'),
+                        help=r'path to weights evaluation tool (default: %(default)s)')
+    parser.add_argument('-m', '--metrics', type=str, default=os.path.join('metrics', 'metrics.exe'),
+                        help=r'path to metrics evaluation tool (default: %(default)s)')
+    parser.add_argument('-p', '--procs', type=int, default=cpu_count(),
                         help=r'number of processes (default: %(default)s)')
     args = parser.parse_args()
 
-    fnames_out = list(glob.iglob(os.path.join(args.input, '**/*_out.*'), recursive=True))
-    with open(args.data + 'total_res.txt', 'w') as res:
+    fnames_out = list(glob.iglob(os.path.join(args.input, '**', '*_out.*'), recursive=True))
+    with open(os.path.join(args.output, 'total_res.txt'), 'w') as res:
         total_res = reduce(lambda a, b: a + b, Pool(args.processes).map(
             partial(meter, weights=args.weights, metrics=args.metrics, data=args.data), fnames_out))
         n = len(fnames_out)
