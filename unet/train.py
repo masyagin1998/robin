@@ -126,7 +126,8 @@ def main():
         validation_steps=(validation_stop - validation_start + 1) / args.batchsize,
         callbacks=[model_checkpoint]
     )
-    model.save_weights('heh.hdf5')
+
+    shutil.rmtree(tmp)
 
     acc = history.history['acc']
     val_acc = history.history['val_acc']
@@ -134,17 +135,19 @@ def main():
     val_loss = history.history['val_loss']
     epochs = range(1, len(acc) + 1)
 
+    plt.figure()
     plt.plot(epochs, acc, 'bo', label='Training accuracy')
     plt.plot(epochs, val_acc, 'b', label='Validation accuracy')
     plt.title('Training and Validation accuracy')
     plt.legend()
-    plt.figure()
 
+    plt.figure()
     plt.plot(epochs, loss, 'bo', label='Training loss')
     plt.plot(epochs, val_loss, 'b', label='Validation loss')
     plt.title('Training and Validation loss')
     plt.legend()
-    plt.figure()
+
+    plt.show()
 
     print("finished in {0:.2f} seconds".format(time.time() - start_time))
 
