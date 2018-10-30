@@ -8,7 +8,9 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 from keras.callbacks import (ModelCheckpoint, EarlyStopping)
+from keras.optimizers import Adam
 from keras.preprocessing.image import ImageDataGenerator
+from keras.utils import multi_gpu_model
 
 from model.unet import unet
 
@@ -128,6 +130,8 @@ def main():
                         help=r'number of training epochs (default: %(default)s)')
     parser.add_argument('-b', '--batchsize', type=int, default=20,
                         help=r'number of images, simultaneously sent to the GPU (default: %(default)s)')
+    parser.add_argument('-g', '--gpus', type=int, default=1,
+                        help=r'number of GPUs for training (default: %(default)s)')
     parser.add_argument('-a', '--augmentate', action='store_true',
                         help=r'use Keras data augmentation')
     parser.add_argument('-p', '--plot', action='store_true',
@@ -144,26 +148,39 @@ def main():
     train_start = 0
     train_stop = int(input_size * (args.train / 100))
     train_generator = gen_data(train_dir, input, train_start, train_stop,
-                               args.batchsize, args.augmentate)
+                               args.batchsize * args.gpus, args.augmentate)
 
     validation_dir = os.path.join(tmp, 'validation')
     validation_start = train_stop
     validation_stop = input_size
     validation_generator = gen_data(validation_dir, input, validation_start, validation_stop,
-                                    args.batchsize, args.augmentate)
+                                    args.batchsize * args.gpus, args.augmentate)
 
     model = unet()
     model_checkpoint = ModelCheckpoint(args.weights, monitor='val_acc', verbose=1,
                                        save_best_only=True, save_weights_only=True)
-    model_early_stopping = EarlyStopping(monitor='val_acc', min_delta=0.05, patience=2, verbose=1, mode='auto')
-    history = model.fit_generator(
-        train_generator,
-        steps_per_epoch=(train_stop - train_start + 1) / args.batchsize,
-        epochs=args.epochs,
-        validation_data=validation_generator,
-        validation_steps=(validation_stop - validation_start + 1) / args.batchsize,
-        callbacks=[model_checkpoint, model_early_stopping]
-    )
+    model_early_stopping = EarlyStopping(monitor='val_acc', min_delta=0.005, patience=2, verbose=1, mode='auto')
+    if args.gpus == 1:
+        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+        history = model.fit_generator(
+            train_generator,
+            steps_per_epoch=(train_stop - train_start + 1) / args.batchsize,
+            epochs=args.epochs,
+            validation_data=validation_generator,
+            validation_steps=(validation_stop - validation_start + 1) / args.batchsize,
+            callbacks=[model_checkpoint, model_early_stopping]
+        )
+    else:
+        parallel_model = multi_gpu_model(model, gpus=args.gpus)
+        parallel_model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+        history = parallel_model.fit_generator(
+            train_generator,
+            steps_per_epoch=(train_stop - train_start + 1) / (args.batchsize * args.gpus),
+            epochs=args.epochs,
+            validation_data=validation_generator,
+            validation_steps=(validation_stop - validation_start + 1) / (args.batchsize * args.gpus),
+            callbacks=[model_checkpoint, model_early_stopping]
+        )
 
     shutil.rmtree(tmp)
 

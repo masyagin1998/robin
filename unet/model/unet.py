@@ -1,6 +1,5 @@
 from keras.layers import *
 from keras.models import *
-from keras.optimizers import *
 
 
 def unet():
@@ -50,7 +49,5 @@ def unet():
     conv10 = Conv2D(1, 1, activation='sigmoid')(conv9)
 
     model = Model(input=inputs, output=conv10)
-
-    model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
 
     return model
