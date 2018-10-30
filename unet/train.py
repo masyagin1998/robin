@@ -7,7 +7,7 @@ import time
 
 import matplotlib.pyplot as plt
 import numpy as np
-from keras.callbacks import ModelCheckpoint
+from keras.callbacks import (ModelCheckpoint, EarlyStopping)
 from keras.preprocessing.image import ImageDataGenerator
 
 from model.unet import unet
@@ -22,7 +22,7 @@ def adjustData(img, mask):
     return (img, mask)
 
 
-def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: int):
+def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: int, augmentate: bool):
     os.mkdir(dname)
     dir_in = os.path.join(dname, 'in')
     os.mkdir(dir_in)
@@ -36,7 +36,15 @@ def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: 
         src = os.path.join(dataset_dname, 'gt', fname.replace('in', 'gt'))
         dst = os.path.join(dir_gt, fname)
         shutil.copy2(src, dst)
-    dir_datagen = ImageDataGenerator()
+
+    dir_datagen = ImageDataGenerator(
+        rotation_range=40,
+        width_shift_range=0.2,
+        height_shift_range=0.2,
+        shear_range=0.2,
+        zoom_range=0.2
+    ) if augmentate else ImageDataGenerator()
+
     dir_in_generator = dir_datagen.flow_from_directory(
         dname,
         classes=['in'],
@@ -68,6 +76,29 @@ def mkdir_s(path: str):
         os.makedirs(path)
 
 
+def plot_graphs(history):
+    """Plot loss and accuracy graphs and save them."""
+    acc = history.history['acc']
+    val_acc = history.history['val_acc']
+    loss = history.history['loss']
+    val_loss = history.history['val_loss']
+    epochs = range(1, len(acc) + 1)
+
+    plt.figure()
+    plt.plot(epochs, acc, 'bo', label='Training accuracy')
+    plt.plot(epochs, val_acc, 'b', label='Validation accuracy')
+    plt.title('Training and Validation accuracy')
+    plt.legend()
+
+    plt.figure()
+    plt.plot(epochs, loss, 'bo', label='Training loss')
+    plt.plot(epochs, val_loss, 'b', label='Validation loss')
+    plt.title('Training and Validation loss')
+    plt.legend()
+
+    plt.show()
+
+
 desc_str = r"""Train U-net with pairs of train and ground-truth images.
 
 All train images should be in "in" directory.
@@ -97,6 +128,10 @@ def main():
                         help=r'number of training epochs (default: %(default)s)')
     parser.add_argument('-b', '--batchsize', type=int, default=20,
                         help=r'number of images, simultaneously sent to the GPU (default: %(default)s)')
+    parser.add_argument('-a', '--augmentate', action='store_true',
+                        help=r'use Keras data augmentation')
+    parser.add_argument('-p', '--plot', action='store_true',
+                        help=r'plot loss and accuracy graphs and save them')
     args = parser.parse_args()
 
     input = args.input
@@ -108,46 +143,32 @@ def main():
     train_dir = os.path.join(tmp, 'train')
     train_start = 0
     train_stop = int(input_size * (args.train / 100))
-    train_generator = gen_data(train_dir, input, train_start, train_stop, args.batchsize)
+    train_generator = gen_data(train_dir, input, train_start, train_stop,
+                               args.batchsize, args.augmentate)
 
     validation_dir = os.path.join(tmp, 'validation')
     validation_start = train_stop
     validation_stop = input_size
-    validation_generator = gen_data(validation_dir, input, validation_start, validation_stop, args.batchsize)
+    validation_generator = gen_data(validation_dir, input, validation_start, validation_stop,
+                                    args.batchsize, args.augmentate)
 
     model = unet()
     model_checkpoint = ModelCheckpoint(args.weights, monitor='val_acc', verbose=1,
                                        save_best_only=True, save_weights_only=True)
+    model_early_stopping = EarlyStopping(monitor='val_acc', min_delta=0.05, patience=2, verbose=1, mode='auto')
     history = model.fit_generator(
         train_generator,
         steps_per_epoch=(train_stop - train_start + 1) / args.batchsize,
         epochs=args.epochs,
         validation_data=validation_generator,
         validation_steps=(validation_stop - validation_start + 1) / args.batchsize,
-        callbacks=[model_checkpoint]
+        callbacks=[model_checkpoint, model_early_stopping]
     )
 
     shutil.rmtree(tmp)
 
-    acc = history.history['acc']
-    val_acc = history.history['val_acc']
-    loss = history.history['loss']
-    val_loss = history.history['val_loss']
-    epochs = range(1, len(acc) + 1)
-
-    plt.figure()
-    plt.plot(epochs, acc, 'bo', label='Training accuracy')
-    plt.plot(epochs, val_acc, 'b', label='Validation accuracy')
-    plt.title('Training and Validation accuracy')
-    plt.legend()
-
-    plt.figure()
-    plt.plot(epochs, loss, 'bo', label='Training loss')
-    plt.plot(epochs, val_loss, 'b', label='Validation loss')
-    plt.title('Training and Validation loss')
-    plt.legend()
-
-    plt.show()
+    if args.plot:
+        plot_graphs(history)
 
     print("finished in {0:.2f} seconds".format(time.time() - start_time))
 
