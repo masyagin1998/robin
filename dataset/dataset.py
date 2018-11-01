@@ -6,6 +6,7 @@ import os
 import time
 from functools import partial
 from multiprocessing import (Pool, cpu_count)
+from random import (seed, randint)
 from shutil import (copy2, rmtree)
 
 import cv2
@@ -68,6 +69,25 @@ def process_img(fname_in, size_x: int = 128, size_y: int = 128, step_x: int = 12
     save_imgs(parts_in, parts_gt, fname_in)
 
 
+def shuffle_imgs(dname: str):
+    """Shuffle input and groun-truth images (actual, if You are using different datasets as one)."""
+    dir_in = os.path.join(dname, 'in')
+    dir_gt = os.path.join(dname, 'gt')
+
+    n = len(os.listdir(dir_in))
+    seed()
+    for i in range(n):
+        j = i
+        while j == i:
+            j = randint(0, n)
+        os.rename(os.path.join(dir_in, str(i) + '_in.png'), os.path.join(dir_in, 'tmp_in.png'))
+        os.rename(os.path.join(dir_in, str(j) + '_in.png'), os.path.join(dir_in, str(i) + '_in.png'))
+        os.rename(os.path.join(dir_in, 'tmp_in.png'), os.path.join(dir_in, str(j) + '_in.png'))
+        os.rename(os.path.join(dir_gt, str(i) + '_gt.png'), os.path.join(dir_gt, 'tmp_gt.png'))
+        os.rename(os.path.join(dir_gt, str(j) + '_gt.png'), os.path.join(dir_gt, str(i) + '_gt.png'))
+        os.rename(os.path.join(dir_gt, 'tmp_gt.png'), os.path.join(dir_gt, str(j) + '_gt.png'))
+
+
 def mkdir_s(path: str):
     """Create directory in specified path, if not exists."""
     if not os.path.exists(path):
@@ -96,6 +116,8 @@ def main():
                         help=r'directory with input train and ground-truth images (default: "%(default)s")')
     parser.add_argument('-o', '--output', type=str, default=os.path.join('.', 'output'),
                         help=r'directory for output train and ground-truth images suitable for U-net (default: "%(default)s")')
+    parser.add_argument('-s', '--shuffle', action='store_true',
+                        help=r'shuffle images (actual, if You are using different datasets as one)')
     parser.add_argument('--size_x', type=int, default=128,
                         help=r'x size of image part (default: %(default)s)')
     parser.add_argument('--size_y', type=int, default=128,
@@ -119,6 +141,8 @@ def main():
         copy2(os.path.join(fname.replace('_in', '_gt')), os.path.join(args.output, 'gt', str(i) + '_gt.png'))
     for dname in glob.iglob(os.path.join(args.input, '**', '*_parts'), recursive=True):
         rmtree(dname)
+    if args.shuffle:
+        shuffle_imgs(args.output)
 
     print("finished in {0:.2f} seconds".format(time.time() - start_time))
 
