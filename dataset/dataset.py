@@ -79,7 +79,7 @@ def shuffle_imgs(dname: str):
     for i in range(n):
         j = i
         while j == i:
-            j = randint(0, n)
+            j = randint(0, n - 1)
         os.rename(os.path.join(dir_in, str(i) + '_in.png'), os.path.join(dir_in, 'tmp_in.png'))
         os.rename(os.path.join(dir_in, str(j) + '_in.png'), os.path.join(dir_in, str(i) + '_in.png'))
         os.rename(os.path.join(dir_in, 'tmp_in.png'), os.path.join(dir_in, str(j) + '_in.png'))

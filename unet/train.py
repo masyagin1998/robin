@@ -4,7 +4,9 @@ import argparse
 import os
 import shutil
 import time
+from random import (seed, randint)
 
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from keras.callbacks import (ModelCheckpoint, EarlyStopping)
@@ -14,17 +16,49 @@ from keras.utils import multi_gpu_model
 
 from model.unet import unet
 
+GAUSSIAN_NOISE_MODE = 0
+SALT_PEPPER_NOISE_MODE = 1
 
-def adjustData(img, mask):
-    if (np.max(img) > 1):
-        img = img / 255
-        mask = mask / 255
-        mask[mask > 0.5] = 1
-        mask[mask <= 0.5] = 0
-    return (img, mask)
+
+def gaussian_noise(img: np.array, mean: int, sigma: int) -> np.array:
+    """Apply additive white gaussian noise to the image."""
+    img = img.astype(np.int16)
+    tmp = np.zeros(img.shape, np.int8)
+    img = img + cv2.randn(tmp, mean, sigma)
+    img[img < 0] = 0
+    img[img > 255] = 255
+    return img.astype(np.uint8)
+
+
+def salt_pepper_noise(img: np.array, prop: int) -> np.array:
+    """Apply "salt-and-pepper" noise to the image."""
+    h = img.shape[0]
+    w = img.shape[1]
+    n = int(h * w * prop / 100)
+    for i in range(n // 2):
+        # Salt.
+        curr_y = int(np.random.uniform(0, h))
+        curr_x = int(np.random.uniform(0, w))
+        img[curr_y, curr_x] = 255
+    for i in range(n // 2):
+        # Pepper.
+        curr_y = int(np.random.uniform(0, h))
+        curr_x = int(np.random.uniform(0, w))
+        img[curr_y, curr_x] = 0
+    return img
+
+
+def normalize_imgs(img_in, img_gt):
+    """Normalize image brightness to range [0.0..1.0]"""
+    img_in = img_in / 255
+    img_gt = img_gt / 255
+    img_gt[img_gt > 0.5] = 1
+    img_gt[img_gt <= 0.5] = 0
+    return img_in, img_gt
 
 
 def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: int, augmentate: bool):
+    """Generate images for training/validation/testing."""
     os.mkdir(dname)
     dir_in = os.path.join(dname, 'in')
     os.mkdir(dir_in)
@@ -68,7 +102,14 @@ def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: 
     )
     dir_generator = zip(dir_in_generator, dir_gt_generator)
     for (img_in, img_gt) in dir_generator:
-        img_in, img_gt = adjustData(img_in, img_gt)
+        img_in, img_gt = normalize_imgs(img_in, img_gt)
+        if augmentate:
+            mod = randint(0, 4)
+            if mod == GAUSSIAN_NOISE_MODE:
+                img_in = gaussian_noise(img_in, 0, 10)
+            elif mod == SALT_PEPPER_NOISE_MODE:
+                img_in = salt_pepper_noise(img_in, 10)
+
         yield (img_in, img_gt)
 
 
@@ -143,6 +184,9 @@ def main():
 
     tmp = args.tmp
     mkdir_s(tmp)
+
+    if args.augmentate:
+        seed()
 
     train_dir = os.path.join(tmp, 'train')
     train_start = 0
