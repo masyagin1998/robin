@@ -6,9 +6,8 @@ import shutil
 import time
 
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
-from keras.callbacks import (ModelCheckpoint, EarlyStopping)
+from keras.callbacks import (ModelCheckpoint, EarlyStopping, TensorBoard)
 from keras.preprocessing.image import ImageDataGenerator
 
 from model.unet import unet
@@ -47,22 +46,40 @@ def salt_pepper_noise(img: np.array, prop: int) -> np.array:
     return img
 
 
+CHANGE_BRIGHTNESS_MODE = 0
+
+
+def change_brightness(img: np.array, diff: int) -> np.array:
+    """Change brightness of image. If diff > 0 - brightness will be increased, else - decreased."""
+    return img
+
+
+CHANGE_CONTRAST_MODE = 1
+
+
+def change_contrast(img: np.array) -> np.array:
+    return img
+
+
 def random_effect_img(img: np.array):
     """Add one of possible effects to image.
 
-    Probability of effects:
+    Probability of noise effects:
     Gaussian noise    - 12,5%;
     Salt-pepper noise - 12,5%;
     No effects        - 75%;
 
+    Probability of brightness/contrast effects:
+
+
     """
     i = np.random.randint(0, 8)
     if i == GAUSSIAN_NOISE_MODE:
-        return gaussian_noise(img, 0, 5)
+        img = gaussian_noise(img, 0, 5)
     elif i == SALT_PEPPER_NOISE_MODE:
-        return salt_pepper_noise(img, 1)
-    else:
-        return img
+        img = salt_pepper_noise(img, 1)
+
+    return img
 
 
 def normalize_imgs(img_in: np.array, img_gt: np.array) -> (np.array, np.array):
@@ -132,29 +149,6 @@ def mkdir_s(path: str):
         os.makedirs(path)
 
 
-def plot_graphs(history):
-    """Plot loss and accuracy graphs and save them."""
-    acc = history.history['acc']
-    val_acc = history.history['val_acc']
-    loss = history.history['loss']
-    val_loss = history.history['val_loss']
-    epochs = range(1, len(acc) + 1)
-
-    plt.figure()
-    plt.plot(epochs, acc, 'bo', label='Training accuracy')
-    plt.plot(epochs, val_acc, 'b', label='Validation accuracy')
-    plt.title('Training and Validation accuracy')
-    plt.legend()
-
-    plt.figure()
-    plt.plot(epochs, loss, 'bo', label='Training loss')
-    plt.plot(epochs, val_loss, 'b', label='Validation loss')
-    plt.title('Training and Validation loss')
-    plt.legend()
-
-    plt.show()
-
-
 desc_str = r"""Train U-net with pairs of train and ground-truth images.
 
 All train images should be in "in" directory.
@@ -176,8 +170,10 @@ def parse_args():
                         help=r'output U-net weights file (default: "%(default)s")')
     parser.add_argument('--train', type=int, default=80,
                         help=r'%% of train images (default: %(default)s%%)')
-    parser.add_argument('--val', type=int, default=20,
+    parser.add_argument('--val', type=int, default=10,
                         help=r'%% of validation images (default: %(default)s%%)')
+    parser.add_argument('--test', type=int, default=10,
+                        help=r'%% of test images (default: %(default)s%%)')
     parser.add_argument('-e', '--epochs', type=int, default=1,
                         help=r'number of training epochs (default: %(default)s)')
     parser.add_argument('-b', '--batchsize', type=int, default=20,
@@ -186,8 +182,8 @@ def parse_args():
                         help=r'number of GPUs for training (default: %(default)s)')
     parser.add_argument('-a', '--augmentate', action='store_true',
                         help=r'use Keras data augmentation')
-    parser.add_argument('-p', '--plot', action='store_true',
-                        help=r'plot loss and accuracy graphs and save them')
+    parser.add_argument('-l', '--log', type=str, default=os.path.join('.', 'logs'),
+                        help=r'directory for logs in tensorboard format')
     return parser.parse_args()
 
 
@@ -213,27 +209,44 @@ def main():
 
     validation_dir = os.path.join(tmp, 'validation')
     validation_start = train_stop
-    validation_stop = input_size
+    validation_stop = validation_start + int(input_size * (args.val / 100))
     validation_generator = gen_data(validation_dir, input, validation_start, validation_stop,
                                     args.batchsize * args.gpus, args.augmentate)
 
+    test_dir = os.path.join(tmp, 'test')
+    test_start = validation_stop
+    test_stop = input_size
+    test_generator = gen_data(test_dir, input, test_start, test_stop,
+                              args.batchsize * args.gpus, args.augmentate)
+
     model = unet(args.gpus)
+    callbacks = []
     model_checkpoint = ModelCheckpoint(args.weights, monitor='val_acc', verbose=1,
                                        save_best_only=True, save_weights_only=True)
-    model_early_stopping = EarlyStopping(monitor='val_acc', min_delta=0.005, patience=2, verbose=1, mode='auto')
-    history = model.fit_generator(
+    callbacks.append(model_checkpoint)
+    model_early_stopping = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=2, verbose=1, mode='auto')
+    callbacks.append(model_early_stopping)
+    mkdir_s(args.log)
+    model_tensorboard = TensorBoard(log_dir=args.log, histogram_freq=0, write_graph=True, write_images=True)
+    callbacks.append(model_tensorboard)
+
+    model.fit_generator(
         train_generator,
         steps_per_epoch=(train_stop - train_start + 1) / args.batchsize,
         epochs=args.epochs,
         validation_data=validation_generator,
         validation_steps=(validation_stop - validation_start + 1) / args.batchsize,
-        callbacks=[model_checkpoint, model_early_stopping]
+        callbacks=callbacks
     )
 
-    shutil.rmtree(tmp)
+    metrics = model.evaluate_generator(
+        test_generator,
+        steps=(test_stop - test_start + 1) / args.batchsize,
+        verbose=1
+    )
+    print(metrics)
 
-    if args.plot:
-        plot_graphs(history)
+    shutil.rmtree(tmp)
 
     print("finished in {0:.2f} seconds".format(time.time() - start_time))
 
