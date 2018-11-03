@@ -1,5 +1,7 @@
 # robin
 
+<img src="static/logo/robin.png" height="150" width="150">
+
 **robin** is a **RO**bust document image **BIN**arization tool, written in Python.
 
 - **robin** - fast document image binarization tool;
