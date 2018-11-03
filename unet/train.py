@@ -4,15 +4,12 @@ import argparse
 import os
 import shutil
 import time
-from random import (seed, randint)
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from keras.callbacks import (ModelCheckpoint, EarlyStopping)
-from keras.optimizers import Adam
 from keras.preprocessing.image import ImageDataGenerator
-from keras.utils import multi_gpu_model
 
 from model.unet import unet
 
@@ -37,18 +34,23 @@ def salt_pepper_noise(img: np.array, prop: int) -> np.array:
     n = int(h * w * prop / 100)
     for i in range(n // 2):
         # Salt.
-        curr_y = int(np.random.uniform(0, h))
-        curr_x = int(np.random.uniform(0, w))
+        curr_y = int(np.random.randint(0, h))
+        curr_x = int(np.random.randint(0, w))
         img[curr_y, curr_x] = 255
     for i in range(n // 2):
         # Pepper.
-        curr_y = int(np.random.uniform(0, h))
-        curr_x = int(np.random.uniform(0, w))
+        curr_y = int(np.random.randint(0, h))
+        curr_x = int(np.random.randint(0, w))
         img[curr_y, curr_x] = 0
     return img
 
 
-def normalize_imgs(img_in, img_gt):
+def apply_random_effect(img: np.array):
+    """Add one of possible effects to image."""
+    return img
+
+
+def normalize_imgs(img_in: np.array, img_gt: np.array) -> (np.array, np.array):
     """Normalize image brightness to range [0.0..1.0]"""
     img_in = img_in / 255
     img_gt = img_gt / 255
@@ -104,11 +106,7 @@ def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: 
     for (img_in, img_gt) in dir_generator:
         img_in, img_gt = normalize_imgs(img_in, img_gt)
         if augmentate:
-            mod = randint(0, 4)
-            if mod == GAUSSIAN_NOISE_MODE:
-                img_in = gaussian_noise(img_in, 0, 10)
-            elif mod == SALT_PEPPER_NOISE_MODE:
-                img_in = salt_pepper_noise(img_in, 10)
+            img_in = apply_random_effect(img_in)
 
         yield (img_in, img_gt)
 
@@ -150,9 +148,7 @@ All ground-truth images should be in "gt" directory.
 """
 
 
-def main():
-    start_time = time.time()
-
+def parse_args():
     parser = argparse.ArgumentParser(prog='train',
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description=desc_str)
@@ -177,7 +173,13 @@ def main():
                         help=r'use Keras data augmentation')
     parser.add_argument('-p', '--plot', action='store_true',
                         help=r'plot loss and accuracy graphs and save them')
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main():
+    start_time = time.time()
+
+    args = parse_args()
 
     input = args.input
     input_size = len(os.listdir(os.path.join(input, 'in')))
@@ -186,7 +188,7 @@ def main():
     mkdir_s(tmp)
 
     if args.augmentate:
-        seed()
+        np.random.seed()
 
     train_dir = os.path.join(tmp, 'train')
     train_start = 0
@@ -200,31 +202,18 @@ def main():
     validation_generator = gen_data(validation_dir, input, validation_start, validation_stop,
                                     args.batchsize * args.gpus, args.augmentate)
 
-    model = unet()
+    model = unet(args.gpus)
     model_checkpoint = ModelCheckpoint(args.weights, monitor='val_acc', verbose=1,
                                        save_best_only=True, save_weights_only=True)
     model_early_stopping = EarlyStopping(monitor='val_acc', min_delta=0.005, patience=2, verbose=1, mode='auto')
-    if args.gpus == 1:
-        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
-        history = model.fit_generator(
-            train_generator,
-            steps_per_epoch=(train_stop - train_start + 1) / args.batchsize,
-            epochs=args.epochs,
-            validation_data=validation_generator,
-            validation_steps=(validation_stop - validation_start + 1) / args.batchsize,
-            callbacks=[model_checkpoint, model_early_stopping]
-        )
-    else:
-        parallel_model = multi_gpu_model(model, gpus=args.gpus)
-        parallel_model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
-        history = parallel_model.fit_generator(
-            train_generator,
-            steps_per_epoch=(train_stop - train_start + 1) / (args.batchsize * args.gpus),
-            epochs=args.epochs,
-            validation_data=validation_generator,
-            validation_steps=(validation_stop - validation_start + 1) / (args.batchsize * args.gpus),
-            callbacks=[model_checkpoint, model_early_stopping]
-        )
+    history = model.fit_generator(
+        train_generator,
+        steps_per_epoch=(train_stop - train_start + 1) / args.batchsize,
+        epochs=args.epochs,
+        validation_data=validation_generator,
+        validation_steps=(validation_stop - validation_start + 1) / args.batchsize,
+        callbacks=[model_checkpoint, model_early_stopping]
+    )
 
     shutil.rmtree(tmp)
 

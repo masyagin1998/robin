@@ -6,7 +6,6 @@ import os
 import time
 from functools import partial
 from multiprocessing import (Pool, cpu_count)
-from random import (seed, randint)
 from shutil import (copy2, rmtree)
 
 import cv2
@@ -75,11 +74,11 @@ def shuffle_imgs(dname: str):
     dir_gt = os.path.join(dname, 'gt')
 
     n = len(os.listdir(dir_in))
-    seed()
+    np.random.seed()
     for i in range(n):
         j = i
         while j == i:
-            j = randint(0, n - 1)
+            j = np.random.randint(0, n)
         os.rename(os.path.join(dir_in, str(i) + '_in.png'), os.path.join(dir_in, 'tmp_in.png'))
         os.rename(os.path.join(dir_in, str(j) + '_in.png'), os.path.join(dir_in, str(i) + '_in.png'))
         os.rename(os.path.join(dir_in, 'tmp_in.png'), os.path.join(dir_in, str(j) + '_in.png'))
@@ -105,9 +104,8 @@ After script finishes, in the output directory there will be two subdirectories:
 """
 
 
-def main():
-    start_time = time.time()
-
+def parse_args():
+    """Get command line arguments."""
     parser = argparse.ArgumentParser(prog='dataset',
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description=desc_str)
@@ -128,7 +126,13 @@ def main():
                         help=r'y size of image part (default: %(default)s)')
     parser.add_argument('-p', '--processes', type=int, default=cpu_count(),
                         help=r'number of processes (default: %(default)s)')
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main():
+    start_time = time.time()
+
+    args = parse_args()
 
     fnames_in = list(glob.iglob(os.path.join(args.input, '**', '*_in.*'), recursive=True))
     f = partial(process_img, size_x=args.size_x, size_y=args.size_y, step_x=args.step_y, step_y=args.step_y)

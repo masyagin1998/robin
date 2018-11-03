@@ -85,13 +85,8 @@ wtih four measures: F-Measure, pseudo F-Measure, PSNR and DRD.
 """
 
 
-def main():
-    start_time = time.time()
-
-    if system() != 'Windows':
-        print(bad_os_str)
-        sys.exit(1)
-
+def parse_args():
+    """Get command line arguments."""
     parser = argparse.ArgumentParser(prog='metrics',
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description=desc_str)
@@ -106,7 +101,17 @@ def main():
                         help=r'path to metrics evaluation tool (default: %(default)s)')
     parser.add_argument('-p', '--procs', type=int, default=cpu_count(),
                         help=r'number of processes (default: %(default)s)')
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main():
+    start_time = time.time()
+
+    if system() != 'Windows':
+        print(bad_os_str)
+        sys.exit(1)
+
+    args = parse_args()
 
     fnames_out = list(glob.iglob(os.path.join(args.input, '**', '*_out.*'), recursive=True))
     with open(os.path.join(args.output, 'total_res.txt'), 'w') as res:

@@ -84,6 +84,47 @@ def mkdir_s(path: str):
         os.makedirs(path)
 
 
+def preprocess_img(img: np.array) -> np.array:
+    """"""
+    return img
+
+
+def process_unet_img(img: np.array, model, batchsize: int = 20) -> np.array:
+    """Split image to 128x128 parts and run U-net for every part."""
+    parts, border_y, border_x = split_img(img)
+    for i in range(len(parts)):
+        parts[i] = parts[i] / 255
+    parts = np.array(parts)
+    parts.shape = (parts.shape[0], parts.shape[1], parts.shape[2], 1)
+    parts = model.predict(parts, batchsize)
+    tmp = []
+    for part in parts:
+        part.shape = (128, 128)
+        tmp.append(part)
+    parts = tmp
+    img = combine_imgs(parts, border_y, border_x, img.shape[0], img.shape[1])
+    img = img * 255
+    img = img.astype(np.uint8)
+    return img
+
+
+def postprocess_img(img: np.array) -> np.array:
+    """Apply Otsu threshold and bottom-hat transform to image."""
+    _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+    img = cv2.erode(img, kernel, 1)
+    img = cv2.dilate(img, kernel, 1)
+    return img
+
+
+def binarize_img(img: np.array, model, batchsize: int = 20) -> np.array:
+    """Binarize image, using U-net, Otsu, bottom-hat transform etc."""
+    img = preprocess_img(img)
+    img = process_unet_img(img, model, batchsize)
+    img = postprocess_img(img)
+    return img
+
+
 desc_str = r"""Binarize images from input directory and write them to output directory.
 
 All input image names should end with "_in" like "1_in.png".
@@ -92,9 +133,8 @@ All output image names will end with "_out" like "1_out.png".
 """
 
 
-def main():
-    start_time = time.time()
-
+def parse_args():
+    """Get command line arguments."""
     parser = argparse.ArgumentParser(prog='binarize',
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description=desc_str)
@@ -105,31 +145,27 @@ def main():
                         help=r'directory for output images (default: "%(default)s")')
     parser.add_argument('-w', '--weights', type=str, default=os.path.join('.', 'bin_weights.hdf5'),
                         help=r'path to U-net weights (default: "%(default)s")')
-    args = parser.parse_args()
+    parser.add_argument('-b', '--batchsize', type=int, default=20,
+                        help=r'number of images, simultaneously sent to the GPU (default: %(default)s)')
+    parser.add_argument('-g', '--gpus', type=int, default=1,
+                        help=r'number of GPUs for binarization (default: %(default)s)')
+    return parser.parse_args()
+
+
+def main():
+    start_time = time.time()
+
+    args = parse_args()
 
     fnames_in = list(glob.iglob(os.path.join(args.input, '**', '*_in.*'), recursive=True))
     model = None
     if len(fnames_in) != 0:
         mkdir_s(args.output)
-        model = unet()
+        model = unet(args.gpus)
         model.load_weights(args.weights)
     for fname in fnames_in:
         img = cv2.imread(os.path.join(fname), cv2.IMREAD_GRAYSCALE)
-        parts, border_y, border_x = split_img(img)
-        for i in range(len(parts)):
-            parts[i] = parts[i] / 255
-        parts = np.array(parts)
-        parts.shape = (parts.shape[0], parts.shape[1], parts.shape[2], 1)
-        parts = model.predict(parts, 20)
-        tmp = []
-        for part in parts:
-            part.shape = (128, 128)
-            tmp.append(part)
-        parts = tmp
-        img = combine_imgs(parts, border_y, border_x, img.shape[0], img.shape[1])
-        img = img * 255
-        img = img.astype(np.uint8)
-        _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        img = binarize_img(img, model, args.batchsize)
         cv2.imwrite(os.path.join(args.output, os.path.split(fname)[-1].replace('_in', '_out')), img)
 
     print("finished in {0:.2f} seconds".format(time.time() - start_time))

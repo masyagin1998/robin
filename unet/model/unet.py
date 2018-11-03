@@ -1,8 +1,11 @@
 from keras.layers import *
 from keras.models import *
+from keras.optimizers import Adam
+from keras.utils import multi_gpu_model
 
 
-def unet():
+def unet(gpus: int = 1):
+    """Create and compile U-net model."""
     inputs = Input((128, 128, 1))
     conv1 = Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(inputs)
     conv1 = Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv1)
@@ -50,4 +53,10 @@ def unet():
 
     model = Model(input=inputs, output=conv10)
 
-    return model
+    if gpus == 1:
+        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+        return model
+    else:
+        parallel_model = multi_gpu_model(model, gpus=gpus)
+        parallel_model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+        return parallel_model
