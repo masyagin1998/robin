@@ -14,7 +14,6 @@ from keras.preprocessing.image import ImageDataGenerator
 from model.unet import unet
 
 GAUSSIAN_NOISE_MODE = 0
-SALT_PEPPER_NOISE_MODE = 1
 
 
 def gaussian_noise(img: np.array, mean: int, sigma: int) -> np.array:
@@ -25,6 +24,9 @@ def gaussian_noise(img: np.array, mean: int, sigma: int) -> np.array:
     img[img < 0] = 0
     img[img > 255] = 255
     return img.astype(np.uint8)
+
+
+SALT_PEPPER_NOISE_MODE = 1
 
 
 def salt_pepper_noise(img: np.array, prop: int) -> np.array:
@@ -45,9 +47,22 @@ def salt_pepper_noise(img: np.array, prop: int) -> np.array:
     return img
 
 
-def apply_random_effect(img: np.array):
-    """Add one of possible effects to image."""
-    return img
+def random_effect_img(img: np.array):
+    """Add one of possible effects to image.
+
+    Probability of effects:
+    Gaussian noise    - 12,5%;
+    Salt-pepper noise - 12,5%;
+    No effects        - 75%;
+
+    """
+    i = np.random.randint(0, 8)
+    if i == GAUSSIAN_NOISE_MODE:
+        return gaussian_noise(img, 0, 5)
+    elif i == SALT_PEPPER_NOISE_MODE:
+        return salt_pepper_noise(img, 1)
+    else:
+        return img
 
 
 def normalize_imgs(img_in: np.array, img_gt: np.array) -> (np.array, np.array):
@@ -106,7 +121,7 @@ def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: 
     for (img_in, img_gt) in dir_generator:
         img_in, img_gt = normalize_imgs(img_in, img_gt)
         if augmentate:
-            img_in = apply_random_effect(img_in)
+            img_in = random_effect_img(img_in)
 
         yield (img_in, img_gt)
 
