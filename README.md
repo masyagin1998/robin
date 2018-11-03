@@ -25,13 +25,21 @@ $ cd robin
 
 #### Metrics
 
+You should know, who good is your binarization tool. And 
+
 #### Dataset
+
+It is realy hard to find good document binarization dataset (DBD), so here I give links to 3 datasets, marked up in a single convenient format. All input image names satisfy `[\d]*_in.png` regexp, and all ground-truth image names satisfy `[\d]*_gt.png` regexp.
 
 - [**DIBCO**](https://yadi.sk/d/_91feeU21y3riA) - 2009 - 2018 competition datasets;
 - [**Palm Leaf Manuscript**](https://yadi.sk/d/sMJxS3IGyTRJEA) - Palm Leaf Manuscript dataset from ICHFR2016 competition;
 - [**Improved LRDE**](https://yadi.sk/d/-VzpQaQ40Wal9Q) - LRDE 2013 magazines dataset. I improved its ground-truths for better usage;
 
+Also I have simple script - `src/dataset/dataset.py`. It can fastly generate train-validation-testing data from provided datasets.
+
 #### Articles
+
+while I was working on **robin**, I constantly read some scientific articles. Here I give links to all of them.
 
 - [**DIBCO**](https://yadi.sk/d/2AQHWU0eFsyMvA) - 2009 - 2018 competition articles (I don't have 2017 article, if You have, please, contact me): ;
 - [**DIBCO metrics**](https://yadi.sk/d/fO3KN21inP662g) - articles about 2 non-standard DIBCO metrics: pseudo F-Measure and DRD (PSNR and F-Measure is realy easy to find on the Web);
