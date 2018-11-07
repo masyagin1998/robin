@@ -7,8 +7,11 @@ import time
 
 import cv2
 import numpy as np
-from keras.callbacks import (ModelCheckpoint, EarlyStopping, TensorBoard)
+from alt_model_checkpoint import AltModelCheckpoint
+from keras.callbacks import (EarlyStopping, TensorBoard)
+from keras.optimizers import Adam
 from keras.preprocessing.image import ImageDataGenerator
+from keras.utils import multi_gpu_model
 
 from model.unet import unet
 
@@ -219,10 +222,21 @@ def main():
     test_generator = gen_data(test_dir, input, test_start, test_stop,
                               args.batchsize * args.gpus, args.augmentate)
 
-    model = unet(args.gpus)
+    original_model = unet()
+    if args.gpus == 1:
+        model = original_model
+        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+    else:
+        model = multi_gpu_model(original_model, gpus=args.gpus)
+        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+
     callbacks = []
-    model_checkpoint = ModelCheckpoint(args.weights, monitor='val_acc', verbose=1,
-                                       save_best_only=True, save_weights_only=True)
+    if args.gpus == 1:
+        model_checkpoint = AltModelCheckpoint(args.weights, model, monitor='val_acc', verbose=1,
+                                              save_best_only=True, save_weights_only=True)
+    else:
+        model_checkpoint = AltModelCheckpoint(args.weights, original_model, monitor='val_acc', verbose=1,
+                                              save_best_only=True, save_weights_only=True)
     callbacks.append(model_checkpoint)
     model_early_stopping = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=2, verbose=1, mode='auto')
     callbacks.append(model_early_stopping)

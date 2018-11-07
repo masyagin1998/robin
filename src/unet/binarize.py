@@ -7,6 +7,7 @@ import time
 
 import cv2
 import numpy as np
+from keras.optimizers import Adam
 
 from model.unet import unet
 
@@ -161,7 +162,8 @@ def main():
     model = None
     if len(fnames_in) != 0:
         mkdir_s(args.output)
-        model = unet(args.gpus)
+        model = unet()
+        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
         model.load_weights(args.weights)
     for fname in fnames_in:
         img = cv2.imread(os.path.join(fname), cv2.IMREAD_GRAYSCALE)
