@@ -232,10 +232,12 @@ def main():
 
     callbacks = []
     if args.gpus == 1:
-        model_checkpoint = AltModelCheckpoint(args.weights, model, monitor='val_acc', verbose=1,
+        model_checkpoint = AltModelCheckpoint("weights-improvement-{epoch:02d}-{val_acc:.2f}.hdf5", model,
+                                              monitor='val_acc', verbose=1,
                                               save_best_only=True, save_weights_only=True)
     else:
-        model_checkpoint = AltModelCheckpoint(args.weights, original_model, monitor='val_acc', verbose=1,
+        model_checkpoint = AltModelCheckpoint("weights-improvement-{epoch:02d}-{val_acc:.2f}.hdf5", original_model,
+                                              monitor='val_acc', verbose=1,
                                               save_best_only=True, save_weights_only=True)
     callbacks.append(model_checkpoint)
     model_early_stopping = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=2, verbose=1, mode='auto')
