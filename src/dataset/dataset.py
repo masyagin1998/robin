@@ -4,7 +4,7 @@ import argparse
 import glob
 import os
 import time
-from functools import (partial, reduce)
+from functools import partial
 from multiprocessing import (Pool, cpu_count)
 from shutil import (copy2, rmtree)
 
@@ -59,35 +59,13 @@ def save_imgs(imgs_in: [np.array], imgs_gt: [np.array], fname_in: str):
         cv2.imwrite(os.path.join(dname, str(i) + '_gt.png'), img)
 
 
-class Weights:
-    """Weights contains number of black, white and total ground-truth images pixels."""
-
-    def __init__(self, black: int, white: int, total: int):
-        self.black = black
-        self.white = white
-        self.total = total
-
-    def __add__(self, other):
-        return Weights(self.black + other.black,
-                       self.white + other.white,
-                       self.total + other.total)
-
-    def __str__(self):
-        return 'B/T:   {0:.5f};\nW/T:  {1:.5f};\n'.format(
-            self.black / self.total, self.white / self.total)
-
-
 def process_img(fname_in, size_x: int = 128, size_y: int = 128, step_x: int = 128, step_y: int = 128):
     """Read train and groun_truth images, split them and save."""
     img_in = cv2.cvtColor(cv2.imread(fname_in), cv2.COLOR_BGR2GRAY)
     parts_in, _, _ = split_img_overlay(img_in, size_x, size_y, step_x, step_y)
     img_gt = cv2.cvtColor(cv2.imread(fname_in.replace('_in', '_gt')), cv2.COLOR_BGR2GRAY)
-    total = img_gt.shape[0] * img_gt.shape[1]
-    white = np.count_nonzero(img_gt)
-    black = total - white
     parts_gt, _, _ = split_img_overlay(img_gt, size_x, size_y, step_x, step_y)
     save_imgs(parts_in, parts_gt, fname_in)
-    return Weights(black, white, total)
 
 
 def shuffle_imgs(dname: str):
@@ -158,8 +136,7 @@ def main():
 
     fnames_in = list(glob.iglob(os.path.join(args.input, '**', '*_in.*'), recursive=True))
     f = partial(process_img, size_x=args.size_x, size_y=args.size_y, step_x=args.step_y, step_y=args.step_y)
-    total_weights = reduce(lambda w1, w2: w1 + w2, Pool(args.processes).map(f, fnames_in))
-    print(total_weights)
+    Pool(args.processes).map(f, fnames_in)
     mkdir_s(os.path.join(args.output))
     mkdir_s(os.path.join(args.output, 'in'))
     mkdir_s(os.path.join(args.output, 'gt'))

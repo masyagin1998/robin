@@ -8,6 +8,7 @@ import time
 import cv2
 import numpy as np
 from alt_model_checkpoint import AltModelCheckpoint
+from keras import backend as K
 from keras.callbacks import (EarlyStopping, TensorBoard)
 from keras.optimizers import Adam
 from keras.preprocessing.image import ImageDataGenerator
@@ -190,6 +191,16 @@ def parse_args():
     return parser.parse_args()
 
 
+smooth = 1e-12
+
+
+def jaccard_coef(y_true, y_pred):
+    intersection = K.sum(y_true * y_pred, axis=[0, -1, -2])
+    sum_ = K.sum(y_true + y_pred, axis=[0, -1, -2])
+    jac = (intersection + smooth) / (sum_ - intersection + smooth)
+    return K.mean(jac)
+
+
 def main():
     start_time = time.time()
 
@@ -225,22 +236,24 @@ def main():
     original_model = unet()
     if args.gpus == 1:
         model = original_model
-        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy',
+                      metrics=[jaccard_coef, 'accuracy'])
     else:
         model = multi_gpu_model(original_model, gpus=args.gpus)
-        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy',
+                      metrics=[jaccard_coef, 'accuracy'])
 
     callbacks = []
     if args.gpus == 1:
-        model_checkpoint = AltModelCheckpoint("weights-improvement-{epoch:02d}-{val_acc:.2f}.hdf5", model,
-                                              monitor='val_acc', verbose=1,
-                                              save_best_only=True, save_weights_only=True)
+        model_checkpoint = AltModelCheckpoint("weights-improvement-{epoch:02d}.hdf5", model,
+                                              monitor='val_jaccard_coef', verbose=1,
+                                              save_best_only=True, save_weights_only=True, mode='max')
     else:
-        model_checkpoint = AltModelCheckpoint("weights-improvement-{epoch:02d}-{val_acc:.2f}.hdf5", original_model,
-                                              monitor='val_acc', verbose=1,
-                                              save_best_only=True, save_weights_only=True)
+        model_checkpoint = AltModelCheckpoint("weights-improvement-{epoch:02d}.hdf5", original_model,
+                                              monitor='val_jaccard_coef', verbose=1,
+                                              save_best_only=True, save_weights_only=True, mode='max')
     callbacks.append(model_checkpoint)
-    model_early_stopping = EarlyStopping(monitor='val_acc', min_delta=0.001, patience=2, verbose=1, mode='auto')
+    model_early_stopping = EarlyStopping(monitor='val_jaccard_coef', min_delta=0.001, patience=2, verbose=1, mode='max')
     callbacks.append(model_early_stopping)
     mkdir_s(args.log)
     model_tensorboard = TensorBoard(log_dir=args.log, histogram_freq=0, write_graph=True, write_images=True)
