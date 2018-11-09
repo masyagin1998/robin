@@ -14,8 +14,7 @@ from re import search
 
 
 class Metrics:
-    """
-    Metrics contains basic DIBCO metrics for binarized and ground-truth image:
+    """Metrics contains basic DIBCO metrics for binarized and ground-truth image:
     F-Measure, pseudo F-Measure, PSNR, DRD.
     By default value of every measure is zero.
     """
