@@ -65,6 +65,14 @@ def change_contrast(img: np.array) -> np.array:
     return img
 
 
+ELASTIC_TRANSFORM_MODE = 0
+
+
+def elastic_transform(img: np.array) -> np.array:
+    """Change image using elastic transform."""
+    return img
+
+
 def random_effect_img(img: np.array):
     """Add one of possible effects to image.
 
@@ -191,12 +199,10 @@ def parse_args():
     return parser.parse_args()
 
 
-smooth = 1e-12
-
-
 def jaccard_coef(y_true, y_pred):
     intersection = K.sum(y_true * y_pred, axis=[0, -1, -2])
     sum_ = K.sum(y_true + y_pred, axis=[0, -1, -2])
+    smooth = 1e-12
     jac = (intersection + smooth) / (sum_ - intersection + smooth)
     return K.mean(jac)
 
