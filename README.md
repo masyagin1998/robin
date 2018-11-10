@@ -9,6 +9,15 @@
 - **dataset** - links for DIBCO 2009-2018, Palm Leaf Manuscript and my own datasets with original and groun-truth images; script for creating training data from datasets;
 - **articles** - selected binarization articles, that helped me a lot;
 
+## Tech
+
+**robin** uses a number of open source projects to work properly:
+- [Keras](https://keras.io/) - high-level neural networks API;
+- [Tensorflow](https://www.tensorflow.org/) - open-source machine-learning framework;
+- [OpenCV](https://opencv.org/) - a library of programming functions mainly aimed at real-time computer vision;
+- [scikit-image](https://scikit-image.org/) - a collection of alg
+orithms for image processing;
+
 ## Installation
 
 **robin** requires [Python](https://www.python.org/) v3.5+ to run.
@@ -38,8 +47,7 @@ It is realy hard to find good document binarization dataset (DBD), so here I giv
 - [**Palm Leaf Manuscript**](https://yadi.sk/d/sMJxS3IGyTRJEA) - Palm Leaf Manuscript dataset from ICHFR2016 competition;
 - [**Improved LRDE**](https://yadi.sk/d/-VzpQaQ40Wal9Q) - LRDE 2013 magazines dataset. I improved its ground-truths for better usage;
 
-Also I have simple script - `src/dataset/dataset.py`. It can fastly generate train-validation-testing data from provided
-datasets.
+Also I have some simple script - `src/dataset/dataset.py` and `src/dataset/stsl-download.py`. First can fastly generate train-validation-testing data from provided datasets, second can be used for getting interesting training data from the Trinity-Sergius Lavra official site. It is expected, that you train your simple **robin** on marked dataset, then create new dataset with `stsl-download.py` and `binarize.py`, correct generated ground-truths and train **robin** again with these new pair of input and ground-truth images.
 
 #### Articles
 
