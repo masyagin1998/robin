@@ -1,103 +1,26 @@
 #!/usr/bin/python3
 
 import argparse
-import os
-import shutil
 import time
+from shutil import (rmtree, copy2)
 
-import cv2
-import numpy as np
+import imageio
 from alt_model_checkpoint import AltModelCheckpoint
 from keras import backend as K
-from keras.callbacks import (EarlyStopping, TensorBoard)
+from keras.callbacks import (EarlyStopping, TensorBoard, Callback)
 from keras.optimizers import Adam
 from keras.preprocessing.image import ImageDataGenerator
 from keras.utils import multi_gpu_model
 
 from model.unet import unet
-
-GAUSSIAN_NOISE_MODE = 0
-
-
-def gaussian_noise(img: np.array, mean: int, sigma: int) -> np.array:
-    """Apply additive white gaussian noise to the image."""
-    img = img.astype(np.int16)
-    tmp = np.zeros(img.shape, np.int8)
-    img = img + cv2.randn(tmp, mean, sigma)
-    img[img < 0] = 0
-    img[img > 255] = 255
-    return img.astype(np.uint8)
-
-
-SALT_PEPPER_NOISE_MODE = 1
-
-
-def salt_pepper_noise(img: np.array, prop: int) -> np.array:
-    """Apply "salt-and-pepper" noise to the image."""
-    h = img.shape[0]
-    w = img.shape[1]
-    n = int(h * w * prop / 100)
-    for i in range(n // 2):
-        # Salt.
-        curr_y = int(np.random.randint(0, h))
-        curr_x = int(np.random.randint(0, w))
-        img[curr_y, curr_x] = 255
-    for i in range(n // 2):
-        # Pepper.
-        curr_y = int(np.random.randint(0, h))
-        curr_x = int(np.random.randint(0, w))
-        img[curr_y, curr_x] = 0
-    return img
-
-
-CHANGE_BRIGHTNESS_MODE = 0
-
-
-def change_brightness(img: np.array, diff: int) -> np.array:
-    """Change brightness of image. If diff > 0 - brightness will be increased, else - decreased."""
-    return img
-
-
-CHANGE_CONTRAST_MODE = 1
-
-
-def change_contrast(img: np.array) -> np.array:
-    return img
-
-
-ELASTIC_TRANSFORM_MODE = 0
-
-
-def elastic_transform(img: np.array) -> np.array:
-    """Change image using elastic transform."""
-    return img
-
-
-def random_effect_img(img: np.array):
-    """Add one of possible effects to image.
-
-    Probability of noise effects:
-    Gaussian noise    - 12,5%;
-    Salt-pepper noise - 12,5%;
-    No effects        - 75%;
-
-    Probability of brightness/contrast effects:
-
-
-    """
-    i = np.random.randint(0, 8)
-    if i == GAUSSIAN_NOISE_MODE:
-        img = gaussian_noise(img, 0, 5)
-    elif i == SALT_PEPPER_NOISE_MODE:
-        img = salt_pepper_noise(img, 1)
-
-    return img
+from utils.augmentations import random_effect_img
+from utils.img_processing import *
 
 
 def normalize_imgs(img_in: np.array, img_gt: np.array) -> (np.array, np.array):
     """Normalize image brightness to range [0.0..1.0]"""
-    img_in = img_in / 255
-    img_gt = img_gt / 255
+    img_in = normalize_img(img_in)
+    img_gt = normalize_img(img_gt)
     img_gt[img_gt > 0.5] = 1
     img_gt[img_gt <= 0.5] = 0
     return img_in, img_gt
@@ -114,10 +37,10 @@ def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: 
     for fname in fnames:
         src = os.path.join(dataset_dname, 'in', fname)
         dst = os.path.join(dir_in, fname)
-        shutil.copy2(src, dst)
+        copy2(src, dst)
         src = os.path.join(dataset_dname, 'gt', fname.replace('in', 'gt'))
         dst = os.path.join(dir_gt, fname)
-        shutil.copy2(src, dst)
+        copy2(src, dst)
 
     dir_datagen = ImageDataGenerator(
         rotation_range=40,
@@ -153,6 +76,39 @@ def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: 
             img_in = random_effect_img(img_in)
 
         yield (img_in, img_gt)
+
+
+class Visualisation(Callback):
+    """Custom Keras callback for visualising training through GIFs."""
+
+    def __init__(self, dir_name: str = 'visualisation', batchsize: int = 20):
+        super(Visualisation, self).__init__()
+        self.dir_name = dir_name
+        self.batchsize = batchsize
+        self.epoch_number = 0
+        self.fnames = os.listdir(self.dir_name)
+        for fname in self.fnames:
+            mkdir_s(os.path.join(self.dir_name, fname[:fname.rfind('.')] + '_frames'))
+
+    def on_train_end(self, logs=None):
+        for fname in self.fnames:
+            frames = []
+            for frame_name in sorted(os.listdir(os.path.join(self.dir_name, fname[:fname.rfind('.')] + '_frames'))):
+                frames.append(imageio.imread(os.path.join(self.dir_name,
+                                                          fname[:fname.rfind('.')] + '_frames',
+                                                          frame_name)))
+            imageio.mimsave(os.path.join(self.dir_name, fname[:fname.rfind('.')] + '.gif'),
+                            frames, format='GIF', duration=0.25)
+            rmtree(os.path.join(self.dir_name, fname[:fname.rfind('.')] + '_frames'))
+
+    def on_epoch_end(self, epoch, logs=None):
+        self.epoch_number += 1
+        for fname in self.fnames:
+            print(os.path.join(self.dir_name, fname))
+            img = cv2.imread(os.path.join(self.dir_name, fname), cv2.IMREAD_GRAYSCALE)
+            img = binarize_img(img, self.model, self.batchsize)
+            cv2.imwrite(os.path.join(self.dir_name, fname[:fname.rfind('.')] + '_frames',
+                                     str(self.epoch_number) + '_out.png'), img)
 
 
 def mkdir_s(path: str):
@@ -196,7 +152,49 @@ def parse_args():
                         help=r'use Keras data augmentation')
     parser.add_argument('-d', '--debug', type=str, default='',
                         help=r'directory to save tensorboard logs and weights history')
+    parser.add_argument('--vis', type=str, default='',
+                        help=r'directory with images for training visualisation')
     return parser.parse_args()
+
+
+def create_callbacks(model, original_model, args):
+    """Create Keras callbacks for training."""
+    callbacks = []
+
+    # Model checkpoint.
+    if args.gpus == 1:
+        model_checkpoint = AltModelCheckpoint(args.weights if args.debug == ''
+                                              else os.path.join(args.debug, 'weights',
+                                                                'weights-improvement-{epoch:02d}.hdf5'),
+                                              model, monitor='val_jaccard_coef', mode='max', verbose=1,
+                                              save_best_only=True, save_weights_only=True)
+    else:
+        model_checkpoint = AltModelCheckpoint(args.weights if args.debug == ''
+                                              else os.path.join(args.debug, 'weights',
+                                                                'weights-improvement-{epoch:02d}.hdf5'),
+                                              original_model, monitor='val_jaccard_coef', mode='max', verbose=1,
+                                              save_best_only=True, save_weights_only=True)
+    callbacks.append(model_checkpoint)
+
+    # Early stopping.
+    model_early_stopping = EarlyStopping(monitor='val_jaccard_coef', min_delta=0.001, patience=2, verbose=1, mode='max')
+    callbacks.append(model_early_stopping)
+
+    # Tensorboard logs.
+    if args.debug != '':
+        mkdir_s(args.debug)
+        mkdir_s(os.path.join(args.debug, 'weights'))
+        mkdir_s(os.path.join(args.debug, 'logs'))
+        model_tensorboard = TensorBoard(log_dir=os.path.join(args.debug, 'logs'),
+                                        histogram_freq=0, write_graph=True, write_images=True)
+        callbacks.append(model_tensorboard)
+
+    # Training visualisation.
+    if args.vis != '':
+        model_visualisation = Visualisation(args.vis, args.batchsize)
+        callbacks.append(model_visualisation)
+
+    return callbacks
 
 
 def jaccard_coef(y_true, y_pred):
@@ -249,29 +247,7 @@ def main():
         model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy',
                       metrics=[jaccard_coef, 'accuracy'])
 
-    callbacks = []
-    if args.gpus == 1:
-        model_checkpoint = AltModelCheckpoint(args.weights if args.debug == ''
-                                              else os.path.join(args.debug, 'weights',
-                                                                'weights-improvement-{epoch:02d}.hdf5'),
-                                              model, monitor='val_jaccard_coef', mode='max', verbose=1,
-                                              save_best_only=True, save_weights_only=True)
-    else:
-        model_checkpoint = AltModelCheckpoint(args.weights if args.debug == ''
-                                              else os.path.join(args.debug, 'weights',
-                                                                'weights-improvement-{epoch:02d}.hdf5'),
-                                              original_model, monitor='val_jaccard_coef', mode='max', verbose=1,
-                                              save_best_only=True, save_weights_only=True)
-    callbacks.append(model_checkpoint)
-    model_early_stopping = EarlyStopping(monitor='val_jaccard_coef', min_delta=0.001, patience=2, verbose=1, mode='max')
-    callbacks.append(model_early_stopping)
-    if args.debug != '':
-        mkdir_s(args.debug)
-        mkdir_s(os.path.join(args.debug, 'weights'))
-        mkdir_s(os.path.join(args.debug, 'logs'))
-        model_tensorboard = TensorBoard(log_dir=os.path.join(args.debug, 'logs'),
-                                        histogram_freq=0, write_graph=True, write_images=True)
-        callbacks.append(model_tensorboard)
+    callbacks = create_callbacks(model, original_model, args)
 
     model.fit_generator(
         train_generator,
@@ -292,7 +268,7 @@ def main():
     )
     print(metrics)
 
-    shutil.rmtree(tmp)
+    rmtree(tmp)
 
     print("finished in {0:.2f} seconds".format(time.time() - start_time))
 
