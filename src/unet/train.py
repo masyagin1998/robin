@@ -186,8 +186,8 @@ def parse_args():
                         help=r'number of GPUs for training (default: %(default)s)')
     parser.add_argument('-a', '--augmentate', action='store_true',
                         help=r'use Keras data augmentation')
-    parser.add_argument('-l', '--log', type=str, default=os.path.join('.', 'logs'),
-                        help=r'directory for logs in tensorboard format')
+    parser.add_argument('-d', '--debug', type=str, default='',
+                        help=r'directory to save tensorboard logs and weights history')
     return parser.parse_args()
 
 
@@ -245,19 +245,27 @@ def main():
 
     callbacks = []
     if args.gpus == 1:
-        model_checkpoint = AltModelCheckpoint("weights-improvement-{epoch:02d}.hdf5", model,
-                                              monitor='val_jaccard_coef', verbose=1,
-                                              save_best_only=True, save_weights_only=True, mode='max')
+        model_checkpoint = AltModelCheckpoint(args.weights if args.debug == ''
+                                              else os.path.join(args.debug, 'weights',
+                                                                'weights-improvement-{epoch:02d}.hdf5'),
+                                              model, monitor='val_jaccard_coef', mode='max', verbose=1,
+                                              save_best_only=True, save_weights_only=True)
     else:
-        model_checkpoint = AltModelCheckpoint("weights-improvement-{epoch:02d}.hdf5", original_model,
-                                              monitor='val_jaccard_coef', verbose=1,
-                                              save_best_only=True, save_weights_only=True, mode='max')
+        model_checkpoint = AltModelCheckpoint(args.weights if args.debug == ''
+                                              else os.path.join(args.debug, 'weights',
+                                                                'weights-improvement-{epoch:02d}.hdf5'),
+                                              original_model, monitor='val_jaccard_coef', mode='max', verbose=1,
+                                              save_best_only=True, save_weights_only=True)
     callbacks.append(model_checkpoint)
     model_early_stopping = EarlyStopping(monitor='val_jaccard_coef', min_delta=0.001, patience=2, verbose=1, mode='max')
     callbacks.append(model_early_stopping)
-    mkdir_s(args.log)
-    model_tensorboard = TensorBoard(log_dir=args.log, histogram_freq=0, write_graph=True, write_images=True)
-    callbacks.append(model_tensorboard)
+    if args.debug != '':
+        mkdir_s(args.debug)
+        mkdir_s(os.path.join(args.debug, 'weights'))
+        mkdir_s(os.path.join(args.debug, 'logs'))
+        model_tensorboard = TensorBoard(log_dir=os.path.join(args.debug, 'logs'),
+                                        histogram_freq=0, write_graph=True, write_images=True)
+        callbacks.append(model_tensorboard)
 
     model.fit_generator(
         train_generator,
@@ -267,6 +275,9 @@ def main():
         validation_steps=(validation_stop - validation_start + 1) / args.batchsize,
         callbacks=callbacks
     )
+
+    if args.debug != '':
+        model.save_weights(args.weights)
 
     metrics = model.evaluate_generator(
         test_generator,
