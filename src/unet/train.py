@@ -81,7 +81,8 @@ def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: 
 class Visualisation(Callback):
     """Custom Keras callback for visualising training through GIFs."""
 
-    def __init__(self, dir_name: str = 'visualisation', batchsize: int = 20):
+    def __init__(self, dir_name: str = 'visualisation', batchsize: int = 20,
+                 monitor: str = 'val_loss', save_best_epochs_only: bool = False, mode: str = 'min'):
         super(Visualisation, self).__init__()
         self.dir_name = dir_name
         self.batchsize = batchsize
@@ -89,6 +90,10 @@ class Visualisation(Callback):
         self.fnames = os.listdir(self.dir_name)
         for fname in self.fnames:
             mkdir_s(os.path.join(self.dir_name, fname[:fname.rfind('.')] + '_frames'))
+        self.monitor = monitor
+        self.save_best_epochs_only = save_best_epochs_only
+        self.mode = mode
+        self.curr_metric = None
 
     def on_train_end(self, logs=None):
         for fname in self.fnames:
@@ -98,17 +103,21 @@ class Visualisation(Callback):
                                                           fname[:fname.rfind('.')] + '_frames',
                                                           frame_name)))
             imageio.mimsave(os.path.join(self.dir_name, fname[:fname.rfind('.')] + '.gif'),
-                            frames, format='GIF', duration=0.25)
+                            frames, format='GIF', duration=0.5)
             rmtree(os.path.join(self.dir_name, fname[:fname.rfind('.')] + '_frames'))
 
-    def on_epoch_end(self, epoch, logs=None):
+    def on_epoch_end(self, epoch, logs):
         self.epoch_number += 1
-        for fname in self.fnames:
-            print(os.path.join(self.dir_name, fname))
-            img = cv2.imread(os.path.join(self.dir_name, fname), cv2.IMREAD_GRAYSCALE)
-            img = binarize_img(img, self.model, self.batchsize)
-            cv2.imwrite(os.path.join(self.dir_name, fname[:fname.rfind('.')] + '_frames',
-                                     str(self.epoch_number) + '_out.png'), img)
+        if (not self.save_best_epochs_only) or \
+                ((self.curr_metric is None) or
+                 (self.mode == 'min' and logs[self.monitor] < self.curr_metric) or
+                 (self.mode == 'max' and logs[self.monitor] > self.curr_metric)):
+            self.curr_metric = logs[self.monitor]
+            for fname in self.fnames:
+                img = cv2.imread(os.path.join(self.dir_name, fname), cv2.IMREAD_GRAYSCALE)
+                img = binarize_img(img, self.model, self.batchsize)
+                cv2.imwrite(os.path.join(self.dir_name, fname[:fname.rfind('.')] + '_frames',
+                                         str(self.epoch_number) + '_out.png'), img)
 
 
 def mkdir_s(path: str):
@@ -177,7 +186,7 @@ def create_callbacks(model, original_model, args):
     callbacks.append(model_checkpoint)
 
     # Early stopping.
-    model_early_stopping = EarlyStopping(monitor='val_jaccard_coef', min_delta=0.001, patience=2, verbose=1, mode='max')
+    model_early_stopping = EarlyStopping(monitor='val_jaccard_coef', min_delta=0.001, patience=8, verbose=1, mode='max')
     callbacks.append(model_early_stopping)
 
     # Tensorboard logs.
@@ -191,7 +200,8 @@ def create_callbacks(model, original_model, args):
 
     # Training visualisation.
     if args.vis != '':
-        model_visualisation = Visualisation(args.vis, args.batchsize)
+        model_visualisation = Visualisation(dir_name=args.vis, batchsize=args.batchsize, monitor='val_jaccard_coef',
+                                            save_best_epochs_only=True, mode='max')
         callbacks.append(model_visualisation)
 
     return callbacks
