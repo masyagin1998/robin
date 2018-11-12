@@ -35,21 +35,21 @@ def unet():
 
     up7 = Conv2D(256, 2, activation='relu', padding='same', kernel_initializer='he_normal')(
         UpSampling2D(size=(2, 2))(drop6))
-    merge7 = concatenate([conv3, up7], axis=3)
+    merge7 = concatenate([drop3, up7], axis=3)
     conv7 = Conv2D(256, 3, activation='relu', padding='same', kernel_initializer='he_normal')(merge7)
     conv7 = Conv2D(256, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv7)
     drop7 = Dropout(0.3)(conv7)
 
     up8 = Conv2D(128, 2, activation='relu', padding='same', kernel_initializer='he_normal')(
         UpSampling2D(size=(2, 2))(drop7))
-    merge8 = concatenate([conv2, up8], axis=3)
+    merge8 = concatenate([drop2, up8], axis=3)
     conv8 = Conv2D(128, 3, activation='relu', padding='same', kernel_initializer='he_normal')(merge8)
     conv8 = Conv2D(128, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv8)
     drop8 = Dropout(0.3)(conv8)
 
     up9 = Conv2D(64, 2, activation='relu', padding='same', kernel_initializer='he_normal')(
         UpSampling2D(size=(2, 2))(drop8))
-    merge9 = concatenate([conv1, up9], axis=3)
+    merge9 = concatenate([drop1, up9], axis=3)
     conv9 = Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(merge9)
     conv9 = Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv9)
     conv9 = Conv2D(2, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv9)

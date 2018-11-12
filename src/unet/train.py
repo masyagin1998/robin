@@ -104,7 +104,7 @@ class Visualisation(Callback):
                                                           frame_name)))
             imageio.mimsave(os.path.join(self.dir_name, fname[:fname.rfind('.')] + '.gif'),
                             frames, format='GIF', duration=0.5)
-            rmtree(os.path.join(self.dir_name, fname[:fname.rfind('.')] + '_frames'))
+            # rmtree(os.path.join(self.dir_name, fname[:fname.rfind('.')] + '_frames'))
 
     def on_epoch_end(self, epoch, logs):
         self.epoch_number += 1
