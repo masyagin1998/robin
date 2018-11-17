@@ -4,6 +4,19 @@ import cv2
 import numpy as np
 
 
+def normalize_in(img: np.array) -> np.array:
+    """"""
+    img /= 256.0
+    img -= 0.5
+    return img
+
+
+def normalize_gt(img: np.array) -> np.array:
+    """"""
+    img /= 255.0
+    return img
+
+
 def split_img(img: np.array, size_x: int = 128, size_y: int = 128) -> ([np.array], int, int):
     """Split image to parts (little images).
 
@@ -66,11 +79,6 @@ def combine_imgs(imgs: [np.array], border_y: int, border_x: int, max_y: int, max
     return img
 
 
-def normalize_img(img: np.array) -> np.array:
-    """Normalize image channels from uint[0..255] to float[0.0..1.0]."""
-    return img.astype(float) / 255
-
-
 def preprocess_img(img: np.array) -> np.array:
     """"""
     return img
@@ -79,8 +87,6 @@ def preprocess_img(img: np.array) -> np.array:
 def process_unet_img(img: np.array, model, batchsize: int = 20) -> np.array:
     """Split image to 128x128 parts and run U-net for every part."""
     parts, border_y, border_x = split_img(img)
-    for i in range(len(parts)):
-        parts[i] = parts[i] / 255
     parts = np.array(parts)
     parts.shape = (parts.shape[0], parts.shape[1], parts.shape[2], 1)
     parts = model.predict(parts, batchsize)
@@ -106,9 +112,9 @@ def postprocess_img(img: np.array) -> np.array:
 
 def binarize_img(img: np.array, model, batchsize: int = 20) -> np.array:
     """Binarize image, using U-net, Otsu, bottom-hat transform etc."""
-    img = preprocess_img(img)
+    # img = preprocess_img(img)
     img = process_unet_img(img, model, batchsize)
-    img = postprocess_img(img)
+    # img = postprocess_img(img)
     return img
 
 

@@ -1,61 +1,72 @@
-import keras.backend as K
-from keras.layers import (Input, Conv2D, MaxPooling2D, UpSampling2D, concatenate, Dropout, BatchNormalization,
-                          Activation, SpatialDropout2D)
+from keras import backend as K
+from keras.layers import Input, Conv2D, MaxPooling2D, UpSampling2D
+from keras.layers.core import SpatialDropout2D, Activation
+from keras.layers.merge import concatenate
+from keras.layers.normalization import BatchNormalization
 from keras.models import Model
 
 
-def downsampling(filters, kernel_size, inputs):
-    """Create downsampling layer."""
-    conv = Conv2D(filters, kernel_size, activation='relu', padding='same', kernel_initializer='he_normal')(inputs)
-    #conv = BatchNormalization(momentum=0.9)(conv)
-    conv = Conv2D(filters, kernel_size, activation='relu', padding='same', kernel_initializer='he_normal')(conv)
-    #conv = BatchNormalization(momentum=0.9)(conv)
-    drop = Dropout(0.1)(conv)
-
-    return drop
-
-
-def upsampling(filters, kernels_size_first, kernels_size_second, inputs, concats):
-    """Create upsampling layer."""
-    up = Conv2D(filters, kernels_size_first, activation='relu',
-                padding='same', kernel_initializer='he_normal')(UpSampling2D(size=(2, 2))(inputs))
-    merge = concatenate([concats, up], axis=3)
-    conv = downsampling(filters, kernels_size_second, merge)
-
+def double_conv_layer(x, size, dropout=0.0):
+    if K.image_dim_ordering() == 'th':
+        axis = 1
+    else:
+        axis = 3
+    conv = Conv2D(size, (3, 3), padding='same')(x)
+    conv = BatchNormalization(axis=axis)(conv)
+    conv = Activation('relu')(conv)
+    conv = Conv2D(size, (3, 3), padding='same')(conv)
+    conv = BatchNormalization(axis=axis)(conv)
+    conv = Activation('relu')(conv)
+    if dropout > 0:
+        conv = SpatialDropout2D(dropout)(conv)
     return conv
 
 
 def unet():
-    """Create U-net model."""
-    inputs = Input((128, 128, 1))
+    if K.image_dim_ordering() == 'th':
+        inputs = Input((1, 128, 128))
+        axis = 1
+    else:
+        inputs = Input((128, 128, 1))
+        axis = 3
+    dropout_val = 0.2
+    filters = 32
 
-    # Contracting/downsampling path.
-    down1 = downsampling(64, 3, inputs)
-    pool1 = MaxPooling2D(pool_size=(2, 2))(down1)
+    conv_224 = double_conv_layer(inputs, filters)
+    pool_112 = MaxPooling2D(pool_size=(2, 2))(conv_224)
 
-    down2 = downsampling(128, 3, pool1)
-    pool2 = MaxPooling2D(pool_size=(2, 2))(down2)
+    conv_112 = double_conv_layer(pool_112, 2 * filters)
+    pool_56 = MaxPooling2D(pool_size=(2, 2))(conv_112)
 
-    down3 = downsampling(256, 3, pool2)
-    pool3 = MaxPooling2D(pool_size=(2, 2))(down3)
+    conv_56 = double_conv_layer(pool_56, 4 * filters)
+    pool_28 = MaxPooling2D(pool_size=(2, 2))(conv_56)
 
-    down4 = downsampling(512, 3, pool3)
-    pool4 = MaxPooling2D(pool_size=(2, 2))(down4)
+    conv_28 = double_conv_layer(pool_28, 8 * filters)
+    pool_14 = MaxPooling2D(pool_size=(2, 2))(conv_28)
 
-    # Bottleneck.
-    bottleneck = downsampling(1024, 4, pool4)
+    conv_14 = double_conv_layer(pool_14, 16 * filters)
+    pool_7 = MaxPooling2D(pool_size=(2, 2))(conv_14)
 
-    # Expanding/upsampling path.
-    up6 = upsampling(512, 2, 3, bottleneck, down4)
+    conv_7 = double_conv_layer(pool_7, 32 * filters)
 
-    up7 = upsampling(256, 2, 3, up6, down3)
+    up_14 = concatenate([UpSampling2D(size=(2, 2))(conv_7), conv_14], axis=axis)
+    up_conv_14 = double_conv_layer(up_14, 16 * filters)
 
-    up8 = upsampling(128, 2, 3, up7, down2)
+    up_28 = concatenate([UpSampling2D(size=(2, 2))(up_conv_14), conv_28], axis=axis)
+    up_conv_28 = double_conv_layer(up_28, 8 * filters)
 
-    up9 = upsampling(64, 2, 3, up8, down1)
+    up_56 = concatenate([UpSampling2D(size=(2, 2))(up_conv_28), conv_56], axis=axis)
+    up_conv_56 = double_conv_layer(up_56, 4 * filters)
 
-    conv9 = Conv2D(2, 3, activation='relu', padding='same', kernel_initializer='he_normal')(up9)
-    conv10 = Conv2D(1, 1, activation='sigmoid')(conv9)
+    up_112 = concatenate([UpSampling2D(size=(2, 2))(up_conv_56), conv_112], axis=axis)
+    up_conv_112 = double_conv_layer(up_112, 2 * filters)
 
-    return Model(input=inputs, output=conv10)
+    up_224 = concatenate([UpSampling2D(size=(2, 2))(up_conv_112), conv_224], axis=axis)
+    up_conv_224 = double_conv_layer(up_224, filters, dropout_val)
 
+    conv_final = Conv2D(1, (1, 1))(up_conv_224)
+    conv_final = Activation('sigmoid')(conv_final)
+
+    model = Model(inputs, conv_final)
+
+    return model

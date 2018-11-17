@@ -13,17 +13,7 @@ from keras.preprocessing.image import ImageDataGenerator
 from keras.utils import multi_gpu_model
 
 from model.unet import unet
-from utils.augmentations import random_effect_img
 from utils.img_processing import *
-
-
-def normalize_imgs(img_in: np.array, img_gt: np.array) -> (np.array, np.array):
-    """Normalize image brightness to range [0.0..1.0]"""
-    img_in = normalize_img(img_in)
-    img_gt = normalize_img(img_gt)
-    img_gt[img_gt > 0.5] = 1
-    img_gt[img_gt <= 0.5] = 0
-    return img_in, img_gt
 
 
 def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: int, augmentate: bool):
@@ -71,10 +61,11 @@ def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: 
     )
     dir_generator = zip(dir_in_generator, dir_gt_generator)
     for (img_in, img_gt) in dir_generator:
-        img_in, img_gt = normalize_imgs(img_in, img_gt)
-        if augmentate:
-            img_in = random_effect_img(img_in)
-
+        # if augmentate:
+        #    img_in = random_effect_img(img_in)
+        # Input and ground-truth images need different normalizations, cause of BatchNormalization,
+        img_in = normalize_in(img_in)
+        img_gt = normalize_gt(img_gt)
         yield (img_in, img_gt)
 
 
@@ -114,10 +105,78 @@ class Visualisation(Callback):
                  (self.mode == 'max' and logs[self.monitor] > self.curr_metric)):
             self.curr_metric = logs[self.monitor]
             for fname in self.fnames:
-                img = cv2.imread(os.path.join(self.dir_name, fname), cv2.IMREAD_GRAYSCALE)
+                img = cv2.imread(os.path.join(self.dir_name, fname), cv2.IMREAD_GRAYSCALE).astype(np.float32)
+                img = normalize_in(img)
                 img = binarize_img(img, self.model, self.batchsize)
                 cv2.imwrite(os.path.join(self.dir_name, fname[:fname.rfind('.')] + '_frames',
                                          str(self.epoch_number) + '_out.png'), img)
+
+
+def create_callbacks(model, original_model, args):
+    """Create Keras callbacks for training."""
+    callbacks = []
+
+    # Model checkpoint.
+    if args.gpus == 1:
+        model_checkpoint = AltModelCheckpoint(args.weights if args.debug == ''
+                                              else os.path.join(args.debug, 'weights',
+                                                                'weights-improvement-{epoch:02d}.hdf5'),
+                                              model, monitor='val_dice_coef', mode='max', verbose=1,
+                                              save_best_only=True, save_weights_only=True)
+    else:
+        model_checkpoint = AltModelCheckpoint(args.weights if args.debug == ''
+                                              else os.path.join(args.debug, 'weights',
+                                                                'weights-improvement-{epoch:02d}.hdf5'),
+                                              original_model, monitor='val_dice_coef', mode='max', verbose=1,
+                                              save_best_only=True, save_weights_only=True)
+    callbacks.append(model_checkpoint)
+
+    # Early stopping.
+    model_early_stopping = EarlyStopping(monitor='val_dice_coef', min_delta=0.001, patience=8, verbose=1, mode='max')
+    callbacks.append(model_early_stopping)
+
+    # Tensorboard logs.
+    if args.debug != '':
+        mkdir_s(args.debug)
+        mkdir_s(os.path.join(args.debug, 'weights'))
+        mkdir_s(os.path.join(args.debug, 'logs'))
+        model_tensorboard = TensorBoard(log_dir=os.path.join(args.debug, 'logs'),
+                                        histogram_freq=0, write_graph=True, write_images=True)
+        callbacks.append(model_tensorboard)
+
+    # Training visualisation.
+    if args.vis != '':
+        model_visualisation = Visualisation(dir_name=args.vis, batchsize=args.batchsize, monitor='val_dice_coef',
+                                            save_best_epochs_only=True, mode='max')
+        callbacks.append(model_visualisation)
+
+    return callbacks
+
+
+def dice_coef(y_true, y_pred):
+    """Count Sorensen-Dice coefficient for output and ground-truth image."""
+    y_true_f = K.flatten(y_true)
+    y_pred_f = K.flatten(y_pred)
+    intersection = K.sum(y_true_f * y_pred_f)
+    return (2.0 * intersection + 1.0) / (K.sum(y_true_f) + K.sum(y_pred_f) + 1.0)
+
+
+def dice_coef_loss(y_true, y_pred):
+    """Count loss of Sorensen-Dice coefficient for output and ground-truth image."""
+    return 1 - dice_coef(y_true, y_pred)
+
+
+def jacard_coef(y_true, y_pred):
+    """Count Jaccard coefficient for output and ground-truth image."""
+    y_true_f = K.flatten(y_true)
+    y_pred_f = K.flatten(y_pred)
+    intersection = K.sum(y_true_f * y_pred_f)
+    return (intersection + 1.0) / (K.sum(y_true_f) + K.sum(y_pred_f) - intersection + 1.0)
+
+
+def jacard_coef_loss(y_true, y_pred):
+    """Count loss of Jaccard coefficient for output and ground-truth image."""
+    return 1 - jacard_coef(y_true, y_pred)
 
 
 def mkdir_s(path: str):
@@ -166,55 +225,6 @@ def parse_args():
     return parser.parse_args()
 
 
-def create_callbacks(model, original_model, args):
-    """Create Keras callbacks for training."""
-    callbacks = []
-
-    # Model checkpoint.
-    if args.gpus == 1:
-        model_checkpoint = AltModelCheckpoint(args.weights if args.debug == ''
-                                              else os.path.join(args.debug, 'weights',
-                                                                'weights-improvement-{epoch:02d}.hdf5'),
-                                              model, monitor='val_jaccard_coef', mode='max', verbose=1,
-                                              save_best_only=True, save_weights_only=True)
-    else:
-        model_checkpoint = AltModelCheckpoint(args.weights if args.debug == ''
-                                              else os.path.join(args.debug, 'weights',
-                                                                'weights-improvement-{epoch:02d}.hdf5'),
-                                              original_model, monitor='val_jaccard_coef', mode='max', verbose=1,
-                                              save_best_only=True, save_weights_only=True)
-    callbacks.append(model_checkpoint)
-
-    # Early stopping.
-    model_early_stopping = EarlyStopping(monitor='val_jaccard_coef', min_delta=0.001, patience=8, verbose=1, mode='max')
-    callbacks.append(model_early_stopping)
-
-    # Tensorboard logs.
-    if args.debug != '':
-        mkdir_s(args.debug)
-        mkdir_s(os.path.join(args.debug, 'weights'))
-        mkdir_s(os.path.join(args.debug, 'logs'))
-        model_tensorboard = TensorBoard(log_dir=os.path.join(args.debug, 'logs'),
-                                        histogram_freq=0, write_graph=True, write_images=True)
-        callbacks.append(model_tensorboard)
-
-    # Training visualisation.
-    if args.vis != '':
-        model_visualisation = Visualisation(dir_name=args.vis, batchsize=args.batchsize, monitor='val_jaccard_coef',
-                                            save_best_epochs_only=True, mode='max')
-        callbacks.append(model_visualisation)
-
-    return callbacks
-
-
-def jaccard_coef(y_true, y_pred):
-    intersection = K.sum(y_true * y_pred, axis=[0, -1, -2])
-    sum_ = K.sum(y_true + y_pred, axis=[0, -1, -2])
-    smooth = 1e-12
-    jac = (intersection + smooth) / (sum_ - intersection + smooth)
-    return K.mean(jac)
-
-
 def main():
     start_time = time.time()
 
@@ -250,12 +260,12 @@ def main():
     original_model = unet()
     if args.gpus == 1:
         model = original_model
-        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy',
-                      metrics=[jaccard_coef, 'accuracy'])
+        model.compile(optimizer=Adam(lr=1e-4), loss=dice_coef_loss,
+                      metrics=[dice_coef, jacard_coef, 'accuracy'])
     else:
         model = multi_gpu_model(original_model, gpus=args.gpus)
-        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy',
-                      metrics=[jaccard_coef, 'accuracy'])
+        model.compile(optimizer=Adam(lr=1e-4), loss=dice_coef_loss,
+                      metrics=[dice_coef, jacard_coef, 'accuracy'])
 
     callbacks = create_callbacks(model, original_model, args)
 

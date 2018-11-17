@@ -49,7 +49,8 @@ def main():
         model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
         model.load_weights(args.weights)
     for fname in fnames_in:
-        img = cv2.imread(fname, cv2.IMREAD_GRAYSCALE)
+        img = cv2.imread(fname, cv2.IMREAD_GRAYSCALE).astype(np.float32)
+        img = normalize_in(img)
         img = binarize_img(img, model, args.batchsize)
         cv2.imwrite(os.path.join(args.output, os.path.split(fname)[-1].replace('_in', '_out')), img)
 
