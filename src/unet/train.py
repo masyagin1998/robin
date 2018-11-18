@@ -13,6 +13,7 @@ from keras.preprocessing.image import ImageDataGenerator
 from keras.utils import multi_gpu_model
 
 from model.unet import unet
+from utils.augmentations import random_effect_img
 from utils.img_processing import *
 
 
@@ -61,9 +62,8 @@ def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: 
     )
     dir_generator = zip(dir_in_generator, dir_gt_generator)
     for (img_in, img_gt) in dir_generator:
-        # if augmentate:
-        #    img_in = random_effect_img(img_in)
-        # Input and ground-truth images need different normalizations, cause of BatchNormalization,
+        if augmentate:
+            img_in, img_gt = random_effect_img(img_in, img_gt)
         img_in = normalize_in(img_in)
         img_gt = normalize_gt(img_gt)
         yield (img_in, img_gt)

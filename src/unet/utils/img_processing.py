@@ -100,7 +100,7 @@ def process_unet_img(img: np.array, model, batchsize: int = 20) -> np.array:
         tmp.append(part)
     parts = tmp
     img = combine_imgs(parts, border_y, border_x, img.shape[0], img.shape[1])
-    img = img * 255
+    img = img * 255.0
     img = img.astype(np.uint8)
     return img
 
