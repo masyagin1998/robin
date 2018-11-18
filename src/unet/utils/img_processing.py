@@ -17,26 +17,28 @@ def normalize_gt(img: np.array) -> np.array:
     return img
 
 
-def split_img(img: np.array, size_x: int = 128, size_y: int = 128) -> ([np.array], int, int):
-    """Split image to parts (little images).
-
-    Walk through the whole image by the window of size size_x * size_y without overlays and
-    save all parts in list. If the image sizes are not multiples of the window sizes,
-    the image will be complemented by a frame of suitable size.
-
-    """
+def add_border(img: np.array, size_x: int = 128, size_y: int = 128) -> (np.array, int, int):
+    """Add border to image, so it will divide window sizes: size_x and size_y"""
     max_y, max_x = img.shape[:2]
     border_y = 0
     if max_y % size_y != 0:
         border_y = (size_y - (max_y % size_y) + 1) // 2
         img = cv2.copyMakeBorder(img, border_y, border_y, 0, 0, cv2.BORDER_CONSTANT, value=[255, 255, 255])
-        max_y = img.shape[0]
     border_x = 0
     if max_x % size_x != 0:
         border_x = (size_x - (max_x % size_x) + 1) // 2
         img = cv2.copyMakeBorder(img, 0, 0, border_x, border_x, cv2.BORDER_CONSTANT, value=[255, 255, 255])
-        max_x = img.shape[1]
+    return img, border_x, border_y
 
+
+def split_img(img: np.array, size_x: int = 128, size_y: int = 128) -> [np.array]:
+    """Split image to parts (little images).
+
+    Walk through the whole image by the window of size size_x * size_y without overlays and
+    save all parts in list. Images sizes should divide window sizes.
+
+    """
+    max_y, max_x = img.shape[:2]
     parts = []
     curr_y = 0
     # TODO: rewrite with generators.
@@ -46,7 +48,7 @@ def split_img(img: np.array, size_x: int = 128, size_y: int = 128) -> ([np.array
             parts.append(img[curr_y:curr_y + size_y, curr_x:curr_x + size_x])
             curr_x += size_x
         curr_y += size_y
-    return parts, border_y, border_x
+    return parts
 
 
 def combine_imgs(imgs: [np.array], border_y: int, border_x: int, max_y: int, max_x: int) -> np.array:
@@ -86,7 +88,9 @@ def preprocess_img(img: np.array) -> np.array:
 
 def process_unet_img(img: np.array, model, batchsize: int = 20) -> np.array:
     """Split image to 128x128 parts and run U-net for every part."""
-    parts, border_y, border_x = split_img(img)
+    img, border_y, border_x = add_border(img)
+    img = normalize_in(img)
+    parts = split_img(img)
     parts = np.array(parts)
     parts.shape = (parts.shape[0], parts.shape[1], parts.shape[2], 1)
     parts = model.predict(parts, batchsize)
@@ -112,7 +116,7 @@ def postprocess_img(img: np.array) -> np.array:
 
 def binarize_img(img: np.array, model, batchsize: int = 20) -> np.array:
     """Binarize image, using U-net, Otsu, bottom-hat transform etc."""
-    # img = preprocess_img(img)
+    img = preprocess_img(img)
     img = process_unet_img(img, model, batchsize)
     # img = postprocess_img(img)
     return img

@@ -106,7 +106,6 @@ class Visualisation(Callback):
             self.curr_metric = logs[self.monitor]
             for fname in self.fnames:
                 img = cv2.imread(os.path.join(self.dir_name, fname), cv2.IMREAD_GRAYSCALE).astype(np.float32)
-                img = normalize_in(img)
                 img = binarize_img(img, self.model, self.batchsize)
                 cv2.imwrite(os.path.join(self.dir_name, fname[:fname.rfind('.')] + '_frames',
                                          str(self.epoch_number) + '_out.png'), img)
@@ -286,7 +285,12 @@ def main():
         steps=(test_stop - test_start + 1) / args.batchsize,
         verbose=1
     )
-    print(metrics)
+    print()
+    print('total:')
+    print('test_loss:       {0:.4f}'.format(metrics[0]))
+    print('test_dice_coef:  {0:.4f}'.format(metrics[1]))
+    print('test_jacar_coef: {0:.4f}'.format(metrics[2]))
+    print('test_accuracy:   {0:.4f}'.format(metrics[3]))
 
     rmtree(tmp)
 
