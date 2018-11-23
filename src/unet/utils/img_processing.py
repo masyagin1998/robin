@@ -82,7 +82,8 @@ def combine_imgs(imgs: [np.array], border_y: int, border_x: int, max_y: int, max
 
 
 def preprocess_img(img: np.array) -> np.array:
-    """"""
+    """Apply bilateral filter to image."""
+    img = cv2.bilateralFilter(img, 9, 50, 50)
     return img
 
 
@@ -106,11 +107,8 @@ def process_unet_img(img: np.array, model, batchsize: int = 20) -> np.array:
 
 
 def postprocess_img(img: np.array) -> np.array:
-    """Apply Otsu threshold and bottom-hat transform to image."""
+    """Apply Otsu threshold to image."""
     _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
-    img = cv2.erode(img, kernel, 1)
-    img = cv2.dilate(img, kernel, 1)
     return img
 
 

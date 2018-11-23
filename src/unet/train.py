@@ -11,7 +11,7 @@ from keras import backend as K
 from keras.callbacks import (EarlyStopping, TensorBoard, Callback)
 from keras.optimizers import Adam
 from keras.preprocessing.image import ImageDataGenerator
-from keras.utils import multi_gpu_model
+from keras.utils import (multi_gpu_model)
 
 from model.unet import unet
 from utils.augmentations import random_effect_img
@@ -20,11 +20,11 @@ from utils.img_processing import *
 
 def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: int, augmentate: bool):
     """Generate images for training/validation/testing."""
-    os.mkdir(dname)
+    mkdir_s(dname)
     dir_in = os.path.join(dname, 'in')
-    os.mkdir(dir_in)
+    mkdir_s(dir_in)
     dir_gt = os.path.join(dname, 'gt')
-    os.mkdir(dir_gt)
+    mkdir_s(dir_gt)
     fnames = ['{}_in.png'.format(i) for i in range(start, stop)]
     for fname in fnames:
         src = os.path.join(dataset_dname, 'in', fname)
@@ -251,19 +251,19 @@ def main():
     train_start = 0
     train_stop = int(input_size * (args.train / 100))
     train_generator = gen_data(train_dir, input, train_start, train_stop,
-                               args.batchsize * args.gpus, args.augmentate)
+                               args.batchsize // args.gpus, args.augmentate)
 
     validation_dir = os.path.join(tmp, 'validation')
     validation_start = train_stop
     validation_stop = validation_start + int(input_size * (args.val / 100))
     validation_generator = gen_data(validation_dir, input, validation_start, validation_stop,
-                                    args.batchsize * args.gpus, args.augmentate)
+                                    args.batchsize // args.gpus, args.augmentate)
 
     test_dir = os.path.join(tmp, 'test')
     test_start = validation_stop
     test_stop = input_size
     test_generator = gen_data(test_dir, input, test_start, test_stop,
-                              args.batchsize * args.gpus, args.augmentate)
+                              args.batchsize // args.gpus, args.augmentate)
 
     original_model = unet()
     if args.gpus == 1:
@@ -283,7 +283,9 @@ def main():
         epochs=args.epochs,
         validation_data=validation_generator,
         validation_steps=(validation_stop - validation_start + 1) / args.batchsize,
-        callbacks=callbacks
+        callbacks=callbacks,
+        # use_multiprocessing=(args.processes > 1),
+        # workers=args.processes
     )
 
     if args.debug != '':
@@ -292,8 +294,11 @@ def main():
     metrics = model.evaluate_generator(
         test_generator,
         steps=(test_stop - test_start + 1) / args.batchsize,
-        verbose=1
+        verbose=1,
+        # use_multiprocessing=(args.processes > 1),
+        # workers=args.processes
     )
+
     print()
     print('total:')
     print('test_loss:       {0:.4f}'.format(metrics[0]))
