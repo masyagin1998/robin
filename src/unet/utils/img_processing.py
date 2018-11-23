@@ -28,7 +28,7 @@ def add_border(img: np.array, size_x: int = 128, size_y: int = 128) -> (np.array
     if max_x % size_x != 0:
         border_x = (size_x - (max_x % size_x) + 1) // 2
         img = cv2.copyMakeBorder(img, 0, 0, border_x, border_x, cv2.BORDER_CONSTANT, value=[255, 255, 255])
-    return img, border_x, border_y
+    return img, border_y, border_x
 
 
 def split_img(img: np.array, size_x: int = 128, size_y: int = 128) -> [np.array]:
@@ -51,7 +51,7 @@ def split_img(img: np.array, size_x: int = 128, size_y: int = 128) -> [np.array]
     return parts
 
 
-def combine_imgs(imgs: [np.array], border_y: int, border_x: int, max_y: int, max_x: int) -> np.array:
+def combine_imgs(imgs: [np.array], max_y: int, max_x: int) -> np.array:
     """Combine image parts to one big image.
 
     Walk through list of images and create from them one big image with sizes max_x * max_y.
@@ -60,16 +60,14 @@ def combine_imgs(imgs: [np.array], border_y: int, border_x: int, max_y: int, max
     from left to right, from top to bottom.
 
     """
-    max_y += (border_y * 2)
-    max_x += (border_x * 2)
     img = np.zeros((max_y, max_x), np.float)
     size_y, size_x = imgs[0].shape
     curr_y = 0
     i = 0
     # TODO: rewrite with generators.
-    while (curr_y + size_y) <= max_y + border_y * 2:
+    while (curr_y + size_y) <= max_y:
         curr_x = 0
-        while (curr_x + size_x) <= max_x + border_x * 2:
+        while (curr_x + size_x) <= max_x:
             try:
                 img[curr_y:curr_y + size_y, curr_x:curr_x + size_x] = imgs[i]
             except:
@@ -77,13 +75,12 @@ def combine_imgs(imgs: [np.array], border_y: int, border_x: int, max_y: int, max
             i += 1
             curr_x += size_x
         curr_y += size_y
-    img = img[border_y:img.shape[0] - border_y, border_x:img.shape[1] - border_x]
     return img
 
 
 def preprocess_img(img: np.array) -> np.array:
     """Apply bilateral filter to image."""
-    img = cv2.bilateralFilter(img, 9, 50, 50)
+    img = cv2.bilateralFilter(img, 5, 50, 50)
     return img
 
 
@@ -100,7 +97,8 @@ def process_unet_img(img: np.array, model, batchsize: int = 20) -> np.array:
         part.shape = (128, 128)
         tmp.append(part)
     parts = tmp
-    img = combine_imgs(parts, border_y, border_x, img.shape[0], img.shape[1])
+    img = combine_imgs(parts, img.shape[0], img.shape[1])
+    img = img[border_y:img.shape[0] - border_y, border_x:img.shape[1] - border_x]
     img = img * 255.0
     img = img.astype(np.uint8)
     return img
@@ -114,9 +112,9 @@ def postprocess_img(img: np.array) -> np.array:
 
 def binarize_img(img: np.array, model, batchsize: int = 20) -> np.array:
     """Binarize image, using U-net, Otsu, bottom-hat transform etc."""
-    img = preprocess_img(img)
+    # img = preprocess_img(img)
     img = process_unet_img(img, model, batchsize)
-    img = postprocess_img(img)
+    #  img = postprocess_img(img)
     return img
 
 
