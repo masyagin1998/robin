@@ -2,6 +2,7 @@
 
 import argparse
 import time
+from multiprocessing import (cpu_count)
 from shutil import (rmtree, copy2)
 
 import imageio
@@ -34,11 +35,17 @@ def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: 
         copy2(src, dst)
 
     dir_datagen = ImageDataGenerator(
+        # Linear transformations.
         rotation_range=40,
-        width_shift_range=0.2,
         height_shift_range=0.2,
+        width_shift_range=0.2,
+        zoom_range=[0.75, 1.25],
         shear_range=0.2,
-        zoom_range=0.2
+        horizontal_flip=True,
+        vertical_flip=True,
+        fill_mode='nearest',
+        # Brightness transformations.
+        brightness_range=[0.75, 1.25]
     ) if augmentate else ImageDataGenerator()
 
     dir_in_generator = dir_datagen.flow_from_directory(
@@ -221,6 +228,8 @@ def parse_args():
                         help=r'directory to save tensorboard logs and weights history')
     parser.add_argument('--vis', type=str, default='',
                         help=r'directory with images for training visualisation')
+    parser.add_argument('-p', '--processes', type=int, default=cpu_count(),
+                        help=r'number of processes (default: %(default)s)')
     return parser.parse_args()
 
 

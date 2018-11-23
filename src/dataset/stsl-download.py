@@ -51,8 +51,6 @@ def parse_args():
                         help=r'ending number (default: %(default)s)')
     parser.add_argument('-o', '--output', type=str, default=os.path.join('.', 'output'),
                         help=r'directory for output train and ground-truth images suitable for U-net (default: "%(default)s")')
-    parser.add_argument('-p', '--processes', type=int, default=cpu_count(),
-                        help=r'number of processes (default: %(default)s)')
     return parser.parse_args()
 
 

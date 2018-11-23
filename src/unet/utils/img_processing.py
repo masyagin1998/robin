@@ -118,7 +118,7 @@ def binarize_img(img: np.array, model, batchsize: int = 20) -> np.array:
     """Binarize image, using U-net, Otsu, bottom-hat transform etc."""
     img = preprocess_img(img)
     img = process_unet_img(img, model, batchsize)
-    # img = postprocess_img(img)
+    img = postprocess_img(img)
     return img
 
 
