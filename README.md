@@ -45,7 +45,8 @@ It is realy hard to find good document binarization dataset (DBD), so here I giv
 
 - [**DIBCO**](https://yadi.sk/d/_91feeU21y3riA) - 2009 - 2018 competition datasets;
 - [**Palm Leaf Manuscript**](https://yadi.sk/d/sMJxS3IGyTRJEA) - Palm Leaf Manuscript dataset from ICHFR2016 competition;
-- [**Improved LRDE**](https://yadi.sk/d/-VzpQaQ40Wal9Q) - LRDE 2013 magazines dataset. I improved its ground-truths for better usage;
+- [**Borders**](https://yadi.sk/d/p6R8kgPP98BZtw) - Small dataset containing bad text boundaries. It can be used with bigger **DIBCO** or **Palm Lead Manuscript** images;
+- [**Improved LRDE**](https://yadi.sk/d/RwRVotFseCl2QA) - LRDE 2013 magazines dataset. I improved its ground-truths for better usage;
 
 Also I have some simple script - `src/dataset/dataset.py` and `src/dataset/stsl-download.py`. First can fastly generate train-validation-testing data from provided datasets, second can be used for getting interesting training data from the Trinity-Sergius Lavra official site. It is expected, that you train your simple **robin** on marked dataset, then create new dataset with `stsl-download.py` and `binarize.py`, correct generated ground-truths and train **robin** again with these new pair of input and ground-truth images.
 
