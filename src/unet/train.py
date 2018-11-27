@@ -1,79 +1,103 @@
 #!/usr/bin/python3
 
 import argparse
+import random
+import sys
 import time
-from multiprocessing import (cpu_count)
-from shutil import (rmtree, copy2)
+from copy import deepcopy
 
+import Augmentor
 import imageio
+from PIL import Image
 from alt_model_checkpoint import AltModelCheckpoint
 from keras import backend as K
 from keras.callbacks import (EarlyStopping, TensorBoard, Callback)
 from keras.optimizers import Adam
-from keras.preprocessing.image import ImageDataGenerator
-from keras.utils import (multi_gpu_model)
+from keras.utils import (multi_gpu_model, Sequence)
 
 from model.unet import unet
-from utils.augmentations import random_effect_img
 from utils.img_processing import *
 
 
-def gen_data(dname: str, dataset_dname: str, start: int, stop: int, batch_size: int, augmentate: bool):
-    """Generate images for training/validation/testing."""
-    mkdir_s(dname)
-    dir_in = os.path.join(dname, 'in')
-    mkdir_s(dir_in)
-    dir_gt = os.path.join(dname, 'gt')
-    mkdir_s(dir_gt)
-    fnames = ['{}_in.png'.format(i) for i in range(start, stop)]
-    for fname in fnames:
-        src = os.path.join(dataset_dname, 'in', fname)
-        dst = os.path.join(dir_in, fname)
-        copy2(src, dst)
-        src = os.path.join(dataset_dname, 'gt', fname.replace('in', 'gt'))
-        dst = os.path.join(dir_gt, fname)
-        copy2(src, dst)
+class ParallelDataGenerator(Sequence):
+    """Generate images for training/validation/testing (parallel version)."""
 
-    dir_datagen = ImageDataGenerator(
+    def __init__(self, fnames_in, fnames_gt, batch_size: int, augmentate: bool):
+        self.fnames_in = deepcopy(fnames_in)
+        self.fnames_gt = deepcopy(fnames_gt)
+        self.batch_size = batch_size
+        self.augmentate = augmentate
+        self.idxs = np.array([i for i in range(len(self.fnames_in))])
+
+    def __len__(self):
+        return int(np.ceil(float(self.idxs.shape[0]) / float(self.batch_size)))
+
+    def on_epoch_end(self):
+        np.random.shuffle(self.idxs)
+
+    def __apply_augmentation__(self, p):
+        batch = []
+        for i in range(0, self.batch_size):
+            images_to_return = [Image.fromarray(x) for x in p.augmentor_images[i]]
+
+            for operation in p.operations:
+                r = round(random.uniform(0, 1), 1)
+                if r <= operation.probability:
+                    images_to_return = operation.perform_operation(images_to_return)
+
+            images_to_return = [np.asarray(x) for x in images_to_return]
+            batch.append(images_to_return)
+        return batch
+
+    def augmentate_batch(self, imgs_in, imgs_gt):
+        """Generate ordered augmented batch of images, using Augmentor"""
+
+        # Initialize augmentator.
+        imgs = [[imgs_in[i], imgs_gt[i]] for i in range(len(imgs_in))]
+        p = Augmentor.DataPipeline(imgs)
         # Linear transformations.
-        rotation_range=40,
-        height_shift_range=0.2,
-        width_shift_range=0.2,
-        zoom_range=[0.75, 1.25],
-        shear_range=0.2,
-        horizontal_flip=True,
-        vertical_flip=True,
-        fill_mode='nearest',
-        # Brightness transformations.
-        brightness_range=[0.75, 1.25]
-    ) if augmentate else ImageDataGenerator()
+        p.rotate_random_90(0.75)
+        p.zoom(0.75, 1.0, 1.2)
+        p.shear(0.75, 20, 20)
+        p.flip_random(0.75)
+        # Non-Linear transformations.
+        p.random_distortion(0.75, 8, 8, 4)
+        imgs = self.__apply_augmentation__(p)
+        imgs_in = [p[0] for p in imgs]
+        imgs_gt = [p[1] for p in imgs]
 
-    dir_in_generator = dir_datagen.flow_from_directory(
-        dname,
-        classes=['in'],
-        target_size=(128, 128),
-        batch_size=batch_size,
-        class_mode=None,
-        color_mode='grayscale',
-        seed=1
-    )
+        # Brightness transformation.
+        p = Augmentor.DataPipeline([[img] for img in imgs_in])
+        p.random_brightness(0.75, 0.75, 1.25)
+        p.random_contrast(0.75, 0.75, 1.25)
+        imgs_in = self.__apply_augmentation__(p)
+        imgs_in = [p[0] for p in imgs_in]
 
-    dir_gt_generator = dir_datagen.flow_from_directory(
-        dname,
-        classes=['gt'],
-        target_size=(128, 128),
-        batch_size=batch_size,
-        class_mode=None,
-        color_mode='grayscale',
-        seed=1
-    )
-    dir_generator = zip(dir_in_generator, dir_gt_generator)
-    for (img_in, img_gt) in dir_generator:
-        if augmentate:
-            img_in, img_gt = random_effect_img(img_in, img_gt)
-        img_in = normalize_in(img_in)
-        img_gt = normalize_gt(img_gt)
-        yield (img_in, img_gt)
+        return imgs_in, imgs_gt
+
+    def __getitem__(self, idx):
+        # Creating numpy arrays with images.
+        start = idx * self.batch_size
+        stop = start + self.batch_size
+        if stop >= self.idxs.shape[0]:
+            stop = self.idxs.shape[0]
+
+        imgs_in = []
+        imgs_gt = []
+        for i in range(start, stop):
+            imgs_in.append(cv2.imread(self.fnames_in[self.idxs[i]], cv2.IMREAD_GRAYSCALE))
+            imgs_gt.append(cv2.imread(self.fnames_gt[self.idxs[i]], cv2.IMREAD_GRAYSCALE))
+
+        # Applying augmentations.
+        if self.augmentate:
+            imgs_in, imgs_gt = self.augmentate_batch(imgs_in, imgs_gt)
+
+        # Normalization.
+        imgs_in = np.array([normalize_in(img) for img in imgs_in])
+        imgs_in.shape = (imgs_in.shape[0], imgs_in.shape[1], imgs_in.shape[2], 1)
+        imgs_gt = np.array([normalize_gt(img) for img in imgs_gt])
+        imgs_gt.shape = (imgs_gt.shape[0], imgs_gt.shape[1], imgs_gt.shape[2], 1)
+        return imgs_in, imgs_gt
 
 
 class Visualisation(Callback):
@@ -204,67 +228,91 @@ def parse_args():
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description=desc_str)
     parser.add_argument('-v', '--version', action='version', version='%(prog)s v0.1')
-    parser.add_argument('-i', '--input', type=str, default=os.path.join('.', 'input'),
-                        help=r'directory with input train and ground-truth images (default: "%(default)s")')
-    parser.add_argument('-t', '--tmp', type=str, default=os.path.join('.', 'tmp'),
-                        help=r'directory for temporary training files. It will be deleted after script finishes (default: "%(default)s")')
-    parser.add_argument('-w', '--weights', type=str, default=os.path.join('.', 'bin_weights.hdf5'),
-                        help=r'output U-net weights file (default: "%(default)s")')
+
+    # Main training settings.
+    parser.add_argument('-e', '--epochs', type=int, default=1,
+                        help=r'number of training epochs (default: %(default)s)')
+    parser.add_argument('-b', '--batchsize', type=int, default=20,
+                        help=r'number of images, simultaneously sent to the GPU (default: %(default)s)')
+    parser.add_argument('-a', '--augmentate', action='store_true',
+                        help=r'use Keras data augmentation')
+
+    # training/validation/testing percents.
     parser.add_argument('--train', type=int, default=80,
                         help=r'%% of train images (default: %(default)s%%)')
     parser.add_argument('--val', type=int, default=10,
                         help=r'%% of validation images (default: %(default)s%%)')
     parser.add_argument('--test', type=int, default=10,
                         help=r'%% of test images (default: %(default)s%%)')
-    parser.add_argument('-e', '--epochs', type=int, default=1,
-                        help=r'number of training epochs (default: %(default)s)')
-    parser.add_argument('-b', '--batchsize', type=int, default=20,
-                        help=r'number of images, simultaneously sent to the GPU (default: %(default)s)')
-    parser.add_argument('-g', '--gpus', type=int, default=1,
-                        help=r'number of GPUs for training (default: %(default)s)')
-    parser.add_argument('-a', '--augmentate', action='store_true',
-                        help=r'use Keras data augmentation')
+
+    # paths.
+    parser.add_argument('-i', '--input', type=str, default=os.path.join('.', 'input'),
+                        help=r'directory with input train and ground-truth images (default: "%(default)s")')
+    parser.add_argument('-w', '--weights', type=str, default=os.path.join('.', 'bin_weights.hdf5'),
+                        help=r'output U-net weights file (default: "%(default)s")')
+
+    # Additional callbacks.
     parser.add_argument('-d', '--debug', type=str, default='',
                         help=r'directory to save tensorboard logs and weights history')
     parser.add_argument('--vis', type=str, default='',
                         help=r'directory with images for training visualisation')
-    parser.add_argument('-p', '--processes', type=int, default=cpu_count(),
-                        help=r'number of processes (default: %(default)s)')
-    return parser.parse_args()
+
+    # Hardware.
+    parser.add_argument('-g', '--gpus', type=int, default=1,
+                        help=r'number of GPUs for training (default: %(default)s)')
+    parser.add_argument('-p', '--extraprocesses', type=int, default=0,
+                        help=r'number of extra processes for data augmentation (default: %(default)s)')
+    parser.add_argument('-q', '--queuesize', type=int, default=10,
+                        help=r'max size of training queue (default: %(default)s)')
+
+    args = parser.parse_args()
+
+    assert (args.epochs > 0)
+    assert (args.batchsize > 0)
+
+    assert (args.train >= 0)
+    assert (args.val >= 0)
+    assert (args.test >= 0)
+
+    assert (args.gpus >= 1)
+    assert (args.extraprocesses >= 0)
+    assert (args.queuesize >= 0)
+
+    return args
 
 
 def main():
     start_time = time.time()
-
     args = parse_args()
+    np.random.seed()
 
-    input = args.input
-    input_size = len(os.listdir(os.path.join(input, 'in')))
+    # Creating data for training, validation and testing.
+    fnames_in = [os.path.join(args.input, 'in', str(i) + '_in.png')
+                 for i in range(len(os.listdir(os.path.join(args.input, 'in'))))]
+    fnames_gt = [os.path.join(args.input, 'gt', str(i) + '_gt.png')
+                 for i in range(len(os.listdir(os.path.join(args.input, 'gt'))))]
+    assert (len(fnames_in) == len(fnames_gt))
+    n = len(fnames_in)
 
-    tmp = args.tmp
-    mkdir_s(tmp)
-
-    if args.augmentate:
-        np.random.seed()
-
-    train_dir = os.path.join(tmp, 'train')
     train_start = 0
-    train_stop = int(input_size * (args.train / 100))
-    train_generator = gen_data(train_dir, input, train_start, train_stop,
-                               args.batchsize // args.gpus, args.augmentate)
+    train_stop = int(n * (args.train / 100))
+    train_in = fnames_in[train_start:train_stop]
+    train_gt = fnames_gt[train_start:train_stop]
+    train_generator = ParallelDataGenerator(train_in, train_gt, args.batchsize, args.augmentate)
 
-    validation_dir = os.path.join(tmp, 'validation')
     validation_start = train_stop
-    validation_stop = validation_start + int(input_size * (args.val / 100))
-    validation_generator = gen_data(validation_dir, input, validation_start, validation_stop,
-                                    args.batchsize // args.gpus, args.augmentate)
+    validation_stop = validation_start + int(n * (args.val / 100))
+    validation_in = fnames_in[validation_start:validation_stop]
+    validation_gt = fnames_gt[validation_start:validation_stop]
+    validation_generator = ParallelDataGenerator(validation_in, validation_gt, args.batchsize, args.augmentate)
 
-    test_dir = os.path.join(tmp, 'test')
     test_start = validation_stop
-    test_stop = input_size
-    test_generator = gen_data(test_dir, input, test_start, test_stop,
-                              args.batchsize // args.gpus, args.augmentate)
+    test_stop = n
+    test_in = fnames_in[test_start:test_stop]
+    test_gt = fnames_gt[test_start:test_stop]
+    test_generator = ParallelDataGenerator(test_in, test_gt, args.batchsize, args.augmentate)
 
+    # Creating model.
     original_model = unet()
     if args.gpus == 1:
         model = original_model
@@ -274,30 +322,47 @@ def main():
         model = multi_gpu_model(original_model, gpus=args.gpus)
         model.compile(optimizer=Adam(lr=1e-4), loss=dice_coef_loss,
                       metrics=[dice_coef, jacard_coef, 'accuracy'])
-
     callbacks = create_callbacks(model, original_model, args)
 
-    model.fit_generator(
-        train_generator,
-        steps_per_epoch=(train_stop - train_start + 1) / args.batchsize,
-        epochs=args.epochs,
-        validation_data=validation_generator,
-        validation_steps=(validation_stop - validation_start + 1) / args.batchsize,
-        callbacks=callbacks,
-        # use_multiprocessing=(args.processes > 1),
-        # workers=args.processes
-    )
-
-    if args.debug != '':
-        model.save_weights(args.weights)
-
-    metrics = model.evaluate_generator(
-        test_generator,
-        steps=(test_stop - test_start + 1) / args.batchsize,
-        verbose=1,
-        # use_multiprocessing=(args.processes > 1),
-        # workers=args.processes
-    )
+    # Running training, validation and testing.
+    if args.extraprocesses == 0:
+        model.fit_generator(
+            generator=train_generator,
+            validation_data=validation_generator,
+            epochs=args.epochs,
+            shuffle=True,
+            callbacks=callbacks,
+            use_multiprocessing=False,
+            workers=0,
+            max_queue_size=args.queuesize,
+            verbose=1
+        )
+        metrics = model.evaluate_generator(
+            generator=test_generator,
+            use_multiprocessing=False,
+            workers=0,
+            max_queue_size=args.queuesize,
+            verbose=1
+        )
+    else:
+        model.fit_generator(
+            generator=train_generator,
+            validation_data=validation_generator,
+            epochs=args.epochs,
+            shuffle=True,
+            callbacks=callbacks,
+            use_multiprocessing=True,
+            workers=args.extraprocesses,
+            max_queue_size=args.queuesize,
+            verbose=1
+        )
+        metrics = model.evaluate_generator(
+            generator=test_generator,
+            use_multiprocessing=True,
+            workers=args.extraprocesses,
+            max_queue_size=args.queuesize,
+            verbose=1
+        )
 
     print()
     print('total:')
@@ -306,8 +371,9 @@ def main():
     print('test_jacar_coef: {0:.4f}'.format(metrics[2]))
     print('test_accuracy:   {0:.4f}'.format(metrics[3]))
 
-    rmtree(tmp)
-
+    # Saving model.
+    if args.debug != '':
+        model.save_weights(args.weights)
     print("finished in {0:.2f} seconds".format(time.time() - start_time))
 
 

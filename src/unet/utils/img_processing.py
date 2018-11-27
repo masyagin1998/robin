@@ -6,6 +6,7 @@ import numpy as np
 
 def normalize_in(img: np.array) -> np.array:
     """"""
+    img = img.astype(np.float32)
     img /= 256.0
     img -= 0.5
     return img
@@ -13,6 +14,7 @@ def normalize_in(img: np.array) -> np.array:
 
 def normalize_gt(img: np.array) -> np.array:
     """"""
+    img = img.astype(np.float32)
     img /= 255.0
     return img
 
