@@ -49,13 +49,41 @@ class ParallelDataGenerator(Sequence):
             batch.append(images_to_return)
         return batch
 
+    def __gaussian_noise__(img, mean, sigma):
+        """Apply additive white gaussian noise to the image."""
+        img = img.astype(np.int16)
+        tmp = np.zeros(img.shape, np.int8)
+        img = img + cv2.randn(tmp, mean, sigma)
+        img[img < 0] = 0
+        img[img > 255] = 255
+        return img.astype(np.uint8)
+
+    def __salt_pepper_noise__(img, prop):
+        """Apply "salt-and-pepper" noise to the image."""
+        h = img.shape[0]
+        w = img.shape[1]
+        n = int(h * w * prop / 100)
+        for i in range(n // 2):
+            # Salt.
+            curr_y = int(np.random.randint(0, h))
+            curr_x = int(np.random.randint(0, w))
+            img[curr_y, curr_x] = 255
+        for i in range(n // 2):
+            # Pepper.
+            curr_y = int(np.random.randint(0, h))
+            curr_x = int(np.random.randint(0, w))
+            img[curr_y, curr_x] = 0
+        return img
+
     def augmentate_batch(self, imgs_in, imgs_gt):
         """Generate ordered augmented batch of images, using Augmentor"""
 
-        # Initialize augmentator.
+        # Noise transformations.
+        # TODO
+
+        # Linear transformations.
         imgs = [[imgs_in[i], imgs_gt[i]] for i in range(len(imgs_in))]
         p = Augmentor.DataPipeline(imgs)
-        # Linear transformations.
         p.rotate_random_90(0.75)
         p.zoom(0.75, 1.0, 1.2)
         p.shear(0.75, 20, 20)
