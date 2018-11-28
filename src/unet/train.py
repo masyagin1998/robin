@@ -37,7 +37,7 @@ class ParallelDataGenerator(Sequence):
 
     def __apply_augmentation__(self, p):
         batch = []
-        for i in range(0, self.batch_size):
+        for i in range(0, len(p.augmentor_images)):
             images_to_return = [Image.fromarray(x) for x in p.augmentor_images[i]]
 
             for operation in p.operations:
