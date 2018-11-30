@@ -75,6 +75,24 @@ class SaltPepperNoiseAugmentor(Operation):
         return images
 
 
+class InvertAugmentor(Operation):
+    """Invert colors in Augmentor formant."""
+
+    def __init__(self, probability):
+        Operation.__init__(self, probability)
+
+    def __invert__(self, image):
+        img = np.array(image).astype(np.uint8)
+        img = 255 - img
+        image = PIL.Image.fromarray(img)
+
+        return image
+
+    def perform_operation(self, images):
+        images = [self.__invert__(image) for image in images]
+        return images
+
+
 class ParallelDataGenerator(Sequence):
     """Generate images for training/validation/testing (parallel version)."""
 
@@ -117,6 +135,9 @@ class ParallelDataGenerator(Sequence):
         # Brightness transformation.
         p.random_brightness(0.75, 0.75, 1.25)
         p.random_contrast(0.75, 0.75, 1.25)
+        # Colors invertion.
+        invert = InvertAugmentor(0.5)
+        p.add_operation(invert)
         imgs_in = self.__apply_augmentation__(p)
         imgs_in = [p[0] for p in imgs_in]
 
@@ -150,11 +171,17 @@ class ParallelDataGenerator(Sequence):
         if self.augmentate:
             imgs_in, imgs_gt = self.augmentate_batch(imgs_in, imgs_gt)
 
+        for i in range(len(imgs_in)):
+            cv2.imshow('in_' + str(i), imgs_in[i])
+            cv2.imshow('gt_' + str(i), imgs_gt[i])
+            cv2.waitKey(0)
+
         # Normalization.
         imgs_in = np.array([normalize_in(img) for img in imgs_in])
         imgs_in.shape = (imgs_in.shape[0], imgs_in.shape[1], imgs_in.shape[2], 1)
         imgs_gt = np.array([normalize_gt(img) for img in imgs_gt])
         imgs_gt.shape = (imgs_gt.shape[0], imgs_gt.shape[1], imgs_gt.shape[2], 1)
+
         return imgs_in, imgs_gt
 
 
@@ -357,6 +384,11 @@ def main():
     train_in = fnames_in[train_start:train_stop]
     train_gt = fnames_gt[train_start:train_stop]
     train_generator = ParallelDataGenerator(train_in, train_gt, args.batchsize, args.augmentate)
+    train_generator.__getitem__(0)
+    train_generator.on_epoch_end()
+    train_generator.__getitem__(0)
+    import sys
+    sys.exit(1)
 
     validation_start = train_stop
     validation_stop = validation_start + int(n * (args.val / 100))
