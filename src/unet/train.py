@@ -171,10 +171,13 @@ class ParallelDataGenerator(Sequence):
         if self.augmentate:
             imgs_in, imgs_gt = self.augmentate_batch(imgs_in, imgs_gt)
 
+        """
+        # Debug.
         for i in range(len(imgs_in)):
             cv2.imshow('in_' + str(i), imgs_in[i])
             cv2.imshow('gt_' + str(i), imgs_gt[i])
             cv2.waitKey(0)
+        """
 
         # Normalization.
         imgs_in = np.array([normalize_in(img) for img in imgs_in])
@@ -384,11 +387,6 @@ def main():
     train_in = fnames_in[train_start:train_stop]
     train_gt = fnames_gt[train_start:train_stop]
     train_generator = ParallelDataGenerator(train_in, train_gt, args.batchsize, args.augmentate)
-    train_generator.__getitem__(0)
-    train_generator.on_epoch_end()
-    train_generator.__getitem__(0)
-    import sys
-    sys.exit(1)
 
     validation_start = train_stop
     validation_stop = validation_start + int(n * (args.val / 100))
