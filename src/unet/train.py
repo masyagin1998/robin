@@ -2,12 +2,13 @@
 
 import argparse
 import random
-import sys
 import time
 from copy import deepcopy
 
 import Augmentor
+import PIL
 import imageio
+from Augmentor.Operations import Operation
 from PIL import Image
 from alt_model_checkpoint import AltModelCheckpoint
 from keras import backend as K
@@ -17,6 +18,61 @@ from keras.utils import (multi_gpu_model, Sequence)
 
 from model.unet import unet
 from utils.img_processing import *
+
+
+class GaussianNoiseAugmentor(Operation):
+    """Gaussian Noise in Augmentor format."""
+
+    def __init__(self, probability, mean, sigma):
+        Operation.__init__(self, probability)
+        self.mean = mean
+        self.sigma = sigma
+
+    def __gaussian_noise__(self, image):
+        img = np.array(image).astype(np.int16)
+        tmp = np.zeros(img.shape, np.int16)
+        img = img + cv2.randn(tmp, self.mean, self.sigma)
+        img[img < 0] = 0
+        img[img > 255] = 255
+        img = img.astype(np.uint8)
+        image = PIL.Image.fromarray(img)
+
+        return image
+
+    def perform_operation(self, images):
+        images = [self.__gaussian_noise__(image) for image in images]
+        return images
+
+
+class SaltPepperNoiseAugmentor(Operation):
+    """Gaussian Noise in Augmentor format."""
+
+    def __init__(self, probability, prop):
+        Operation.__init__(self, probability)
+        self.prop = prop
+
+    def __salt_pepper_noise__(self, image):
+        img = np.array(image).astype(np.uint8)
+        h = img.shape[0]
+        w = img.shape[1]
+        n = int(h * w * self.prop)
+        for i in range(n // 2):
+            # Salt.
+            curr_y = int(np.random.randint(0, h))
+            curr_x = int(np.random.randint(0, w))
+            img[curr_y, curr_x] = 255
+        for i in range(n // 2):
+            # Pepper.
+            curr_y = int(np.random.randint(0, h))
+            curr_x = int(np.random.randint(0, w))
+            img[curr_y, curr_x] = 0
+        image = PIL.Image.fromarray(img)
+
+        return image
+
+    def perform_operation(self, images):
+        images = [self.__salt_pepper_noise__(image) for image in images]
+        return images
 
 
 class ParallelDataGenerator(Sequence):
@@ -49,57 +105,31 @@ class ParallelDataGenerator(Sequence):
             batch.append(images_to_return)
         return batch
 
-    def __gaussian_noise__(img, mean, sigma):
-        """Apply additive white gaussian noise to the image."""
-        img = img.astype(np.int16)
-        tmp = np.zeros(img.shape, np.int8)
-        img = img + cv2.randn(tmp, mean, sigma)
-        img[img < 0] = 0
-        img[img > 255] = 255
-        return img.astype(np.uint8)
-
-    def __salt_pepper_noise__(img, prop):
-        """Apply "salt-and-pepper" noise to the image."""
-        h = img.shape[0]
-        w = img.shape[1]
-        n = int(h * w * prop / 100)
-        for i in range(n // 2):
-            # Salt.
-            curr_y = int(np.random.randint(0, h))
-            curr_x = int(np.random.randint(0, w))
-            img[curr_y, curr_x] = 255
-        for i in range(n // 2):
-            # Pepper.
-            curr_y = int(np.random.randint(0, h))
-            curr_x = int(np.random.randint(0, w))
-            img[curr_y, curr_x] = 0
-        return img
-
     def augmentate_batch(self, imgs_in, imgs_gt):
         """Generate ordered augmented batch of images, using Augmentor"""
 
         # Noise transformations.
-        # TODO
+        p = Augmentor.DataPipeline([[img] for img in imgs_in])
+        gaussian_noise = GaussianNoiseAugmentor(0.25, 0, 10)
+        p.add_operation(gaussian_noise)
+        salt_pepper_noise = SaltPepperNoiseAugmentor(0.25, 0.005)
+        p.add_operation(salt_pepper_noise)
+        # Brightness transformation.
+        p.random_brightness(0.75, 0.75, 1.25)
+        p.random_contrast(0.75, 0.75, 1.25)
+        imgs_in = self.__apply_augmentation__(p)
+        imgs_in = [p[0] for p in imgs_in]
 
         # Linear transformations.
         imgs = [[imgs_in[i], imgs_gt[i]] for i in range(len(imgs_in))]
         p = Augmentor.DataPipeline(imgs)
-        p.rotate_random_90(0.75)
         p.zoom(0.75, 1.0, 1.2)
         p.shear(0.75, 20, 20)
-        p.flip_random(0.75)
         # Non-Linear transformations.
         p.random_distortion(0.75, 8, 8, 4)
         imgs = self.__apply_augmentation__(p)
         imgs_in = [p[0] for p in imgs]
         imgs_gt = [p[1] for p in imgs]
-
-        # Brightness transformation.
-        p = Augmentor.DataPipeline([[img] for img in imgs_in])
-        p.random_brightness(0.75, 0.75, 1.25)
-        p.random_contrast(0.75, 0.75, 1.25)
-        imgs_in = self.__apply_augmentation__(p)
-        imgs_in = [p[0] for p in imgs_in]
 
         return imgs_in, imgs_gt
 
