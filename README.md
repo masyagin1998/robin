@@ -6,8 +6,9 @@
 
 - **robin** - fast document image binarization tool;
 - **metrics** - script for measuring the quality of binarization;
-- **dataset** - links for DIBCO 2009-2018, Palm Leaf Manuscript and my own datasets with original and groun-truth images; script for creating training data from datasets;
+- **dataset** - links for DIBCO 2009-2018, Palm Leaf Manuscript and my own datasets with original and ground-truth images; scripts for creating training data from datasets and downloading imagest from [STSL](http://stsl.ru/);
 - **articles** - selected binarization articles, that helped me a lot;
+- **weights** - pretrained weigths for **robin**;
 
 ## Tech
 
@@ -15,8 +16,7 @@
 - [Keras](https://keras.io/) - high-level neural networks API;
 - [Tensorflow](https://www.tensorflow.org/) - open-source machine-learning framework;
 - [OpenCV](https://opencv.org/) - a library of programming functions mainly aimed at real-time computer vision;
-- [scikit-image](https://scikit-image.org/) - a collection of alg
-orithms for image processing;
+- [Augmentor](https://augmentor.readthedocs.io/en/master/) - a collection of augmentation algorithms;
 
 ## Installation
 
@@ -27,13 +27,14 @@ Get **robin**, install the dependencies from requirements.txt, download datasets
 ```sh
 $ git clone https://github.com/masyagin1998/robin.git
 $ cd robin
+$ pip install -r requirements.txt
 ```
 ## HowTo
 
 #### Robin
 
-**robin** consists of three files: `src/unet/train.py`, which generates weights for U-net model from input 128x128 pairs of
-original and ground-truth images, `src/unet/binarize.py` for binarization group of input document images and `src/unet/model/unet.py` - U-net architecture. Model works with 128x128 images, so binarization tool firstly splits input imags to 128x128 pieces. You can easily rewrite code for different size of U-net image, but researches show that 128 x 128 is the best size.
+**robin** consists of two main files: `src/unet/train.py`, which generates weights for U-net model from input 128x128 pairs of
+original and ground-truth images, and `src/unet/binarize.py` for binarization group of input document images. Model works with 128x128 images, so binarization tool firstly splits input imags to 128x128 pieces. You can easily rewrite code for different size of U-net image, but researches show that 128 x 128 is the best size.
 
 #### Metrics
 
@@ -58,3 +59,12 @@ While I was working on **robin**, I constantly read some scientific articles. He
 - [**DIBCO metrics**](https://yadi.sk/d/fO3KN21inP662g) - articles about 2 non-standard DIBCO metrics: pseudo F-Measure and DRD (PSNR and F-Measure is realy easy to find on the Web);
 - [**U-net**](https://yadi.sk/i/5NligqxNbUPCYA) - articles about U-net convolutional network architecture; 
 - [**CTPN**](https://yadi.sk/i/oiPxuN_a2a02Eg) - articles about CTPN - fast neural network for finding text in images;
+
+#### Weigths
+
+Training neural network is realy hard, because you need powerful GPU and CPU, so I provide some pretrained weigths (For training I used two combinations: `Nvidia 1050 Ti 4 Gb + Intel Core I7 7700 HQ + 8 Gb RAM` and `Nvidia 1080 Ti SLI + Intel Xeon X5675 + 128 Gb RAM`).
+
+## Examples of work
+
+## Bugs
+- `Keras` has some problems with parallel data augmentation: it creates too many processes. I hope it will be fixed soon, but no it is better to use small values of `--extraprocesses` flag;
