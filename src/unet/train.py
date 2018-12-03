@@ -417,7 +417,9 @@ def main():
     if args.extraprocesses == 0:
         model.fit_generator(
             generator=train_generator,
+            steps_per_epoch=train_generator.__len__(),  # Compatibility with old Keras versions.
             validation_data=validation_generator,
+            validation_steps=validation_generator.__len__(),  # Compatibility with old Keras versions. 
             epochs=args.epochs,
             shuffle=True,
             callbacks=callbacks,
@@ -436,7 +438,9 @@ def main():
     else:
         model.fit_generator(
             generator=train_generator,
+            steps_per_epoch=train_generator.__len__(),  # Compatibility with old Keras versions.
             validation_data=validation_generator,
+            validation_steps=validation_generator.__len__(),  # Compatibility with old Keras versions.
             epochs=args.epochs,
             shuffle=True,
             callbacks=callbacks,
