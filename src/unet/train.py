@@ -4,6 +4,7 @@ import argparse
 import random
 import time
 from copy import deepcopy
+import sys
 
 import Augmentor
 import PIL
@@ -136,8 +137,8 @@ class ParallelDataGenerator(Sequence):
         p.random_brightness(0.75, 0.75, 1.25)
         p.random_contrast(0.75, 0.75, 1.25)
         # Colors invertion.
-        invert = InvertAugmentor(0.5)
-        p.add_operation(invert)
+        #invert = InvertAugmentor(0.5)
+        #p.add_operation(invert)
         imgs_in = self.__apply_augmentation__(p)
         imgs_in = [p[0] for p in imgs_in]
 
@@ -463,6 +464,8 @@ def main():
     if args.debug != '':
         model.save_weights(args.weights)
     print("finished in {0:.2f} seconds".format(time.time() - start_time))
+    # Sometimes script freezes.
+    sys.exit(0)
 
 
 if __name__ == "__main__":
