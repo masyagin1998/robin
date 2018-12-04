@@ -67,6 +67,23 @@ Training neural network is realy hard, because you need powerful GPU and CPU, so
 - [**Base**](https://yadi.sk/d/rRz3FYrCFGfu4w) - weights after training NN on `DIBCO` and `borders` data for 256 epochs with batchsize 128 and enabled augmentation;
 
 ## Examples of work
+- Old Orthodox document:
+
+|       Original image           |          Binarized              |
+|--------------------------------|---------------------------------|
+| ![](static/examples/01_in.jpg) | ![](static/examples/01_out.jpg) |
+
+- Checkered sheet:
+
+|       Original image           |          Binarized              |
+|--------------------------------|---------------------------------|
+| ![](static/examples/02_in.jpg) | ![](static/examples/02_out.jpg) |
+
+- Old evidence:
+
+|       Original image           |          Binarized              |
+|--------------------------------|---------------------------------|
+| ![](static/examples/03_in.jpg) | ![](static/examples/03_out.jpg) |
 
 ## Bugs
 - `Keras` has some problems with parallel data augmentation: it creates too many processes. I hope it will be fixed soon, but no it is better to use small values of `--extraprocesses` flag;
