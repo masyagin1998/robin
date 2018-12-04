@@ -58,7 +58,8 @@ While I was working on **robin**, I constantly read some scientific articles. He
 - [**DIBCO**](https://yadi.sk/d/2AQHWU0eFsyMvA) - 2009 - 2018 competition articles (I don't have 2017 article, if You have, please, contact me);
 - [**DIBCO metrics**](https://yadi.sk/d/fO3KN21inP662g) - articles about 2 non-standard DIBCO metrics: pseudo F-Measure and DRD (PSNR and F-Measure is realy easy to find on the Web);
 - [**U-net**](https://yadi.sk/i/5NligqxNbUPCYA) - articles about U-net convolutional network architecture; 
-- [**CTPN**](https://yadi.sk/i/oiPxuN_a2a02Eg) - articles about CTPN - fast neural network for finding text in images;
+- [**CTPN**](https://yadi.sk/i/oiPxuN_a2a02Eg) - articles about CTPN - fast neural network for finding text in images (My Neural Network doesn't use it, but it is great and I began my researches from it);
+- [**ZF_UNET_224**](https://yadi.sk/i/WbRq24jq0SsjGA) - I think, this is best U-net implementation in the world;
 
 #### Weigths
 
