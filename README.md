@@ -64,7 +64,7 @@ While I was working on **robin**, I constantly read some scientific articles. He
 
 Training neural network is not cheap, because you need powerful GPU and CPU, so I provide some pretrained weigths (For training I used two combinations: `Nvidia 1050 Ti 4 Gb + Intel Core I7 7700 HQ + 8 Gb RAM` and `Nvidia 1080 Ti SLI + Intel Xeon E2650 + 128 Gb RAM`).
 
-- [**Base**](https://yadi.sk/d/rRz3FYrCFGfu4w) - weights after training NN on `DIBCO` and `borders` data for 256 epochs with batchsize 128 and enabled augmentation;
+- [**Base**](https://yadi.sk/d/rRz3FYrCFGfu4w) - weights after training NN on `DIBCO` and `borders` data for 256 epochs with batchsize 128 and enabled augmentation. **IT IS TRAINED FOR A4 300 DPI Images, so Your input data must have good resolution**;
 
 ## Examples of work
 - Old Orthodox document:
