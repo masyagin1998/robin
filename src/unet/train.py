@@ -2,9 +2,9 @@
 
 import argparse
 import random
+import sys
 import time
 from copy import deepcopy
-import sys
 
 import Augmentor
 import PIL
@@ -13,7 +13,7 @@ from Augmentor.Operations import Operation
 from PIL import Image
 from alt_model_checkpoint import AltModelCheckpoint
 from keras import backend as K
-from keras.callbacks import (EarlyStopping, TensorBoard, Callback)
+from keras.callbacks import (TensorBoard, Callback)
 from keras.optimizers import Adam
 from keras.utils import (multi_gpu_model, Sequence)
 
@@ -76,7 +76,7 @@ class SaltPepperNoiseAugmentor(Operation):
         return images
 
 
-class InvertAugmentor(Operation):
+class InvertPartAugmentor(Operation):
     """Invert colors in Augmentor formant."""
 
     def __init__(self, probability):
@@ -84,7 +84,15 @@ class InvertAugmentor(Operation):
 
     def __invert__(self, image):
         img = np.array(image).astype(np.uint8)
-        img = 255 - img
+        h = img.shape[0]
+        w = img.shape[1]
+        y_begin = int(np.random.randint(0, h))
+        x_begin = int(np.random.randint(0, w))
+        y_add = int(np.random.randint(0, h - y_begin))
+        x_add = int(np.random.randint(0, w - x_begin))
+        for i in range(y_begin, y_begin + y_add):
+            for j in range(x_begin, x_begin + x_add):
+                img[i][j] = 255 - img[i][j]
         image = PIL.Image.fromarray(img)
 
         return image
@@ -127,6 +135,19 @@ class ParallelDataGenerator(Sequence):
     def augmentate_batch(self, imgs_in, imgs_gt):
         """Generate ordered augmented batch of images, using Augmentor"""
 
+        # Non-Linear transformations.
+        imgs = [[imgs_in[i], imgs_gt[i]] for i in range(len(imgs_in))]
+        p = Augmentor.DataPipeline(imgs)
+        p.random_distortion(0.5, 6, 6, 4)
+        # Linear transformations.
+        # p.rotate(0.75, 15, 15)
+        p.shear(0.75, 10.0, 10.0)
+        p.zoom(0.75, 1.0, 1.2)
+        p.skew(0.75, 0.75)
+        imgs = self.__apply_augmentation__(p)
+        imgs_in = [p[0] for p in imgs]
+        imgs_gt = [p[1] for p in imgs]
+
         # Noise transformations.
         p = Augmentor.DataPipeline([[img] for img in imgs_in])
         gaussian_noise = GaussianNoiseAugmentor(0.25, 0, 10)
@@ -134,24 +155,14 @@ class ParallelDataGenerator(Sequence):
         salt_pepper_noise = SaltPepperNoiseAugmentor(0.25, 0.005)
         p.add_operation(salt_pepper_noise)
         # Brightness transformation.
-        p.random_brightness(0.75, 0.75, 1.25)
-        p.random_contrast(0.75, 0.75, 1.25)
+        p.random_brightness(0.75, 0.5, 1.5)
+        p.random_contrast(0.75, 0.5, 1.5)
         # Colors invertion.
-        #invert = InvertAugmentor(0.5)
-        #p.add_operation(invert)
+        invert = InvertPartAugmentor(0.25)
+        p.add_operation(invert)
+        p.invert(0.5)
         imgs_in = self.__apply_augmentation__(p)
         imgs_in = [p[0] for p in imgs_in]
-
-        # Linear transformations.
-        imgs = [[imgs_in[i], imgs_gt[i]] for i in range(len(imgs_in))]
-        p = Augmentor.DataPipeline(imgs)
-        p.zoom(0.75, 1.0, 1.2)
-        p.shear(0.75, 20, 20)
-        # Non-Linear transformations.
-        p.random_distortion(0.75, 8, 8, 4)
-        imgs = self.__apply_augmentation__(p)
-        imgs_in = [p[0] for p in imgs]
-        imgs_gt = [p[1] for p in imgs]
 
         return imgs_in, imgs_gt
 
@@ -251,8 +262,10 @@ def create_callbacks(model, original_model, args):
     callbacks.append(model_checkpoint)
 
     # Early stopping.
-    model_early_stopping = EarlyStopping(monitor='val_dice_coef', min_delta=0.001, patience=20, verbose=1, mode='max')
-    callbacks.append(model_early_stopping)
+    # model_early_stopping = EarlyStopping(monitor='val_dice_coef', min_delta=0.001, patience=20, verbose=1, mode='max')
+    # callbacks.append(model_early_stopping)
+
+    # Learning-rate scheduler.
 
     # Tensorboard logs.
     if args.debug != '':
@@ -384,6 +397,7 @@ def main():
     n = len(fnames_in)
 
     train_start = 0
+
     train_stop = int(n * (args.train / 100))
     train_in = fnames_in[train_start:train_stop]
     train_gt = fnames_gt[train_start:train_stop]
