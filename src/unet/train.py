@@ -265,8 +265,6 @@ def create_callbacks(model, original_model, args):
     # model_early_stopping = EarlyStopping(monitor='val_dice_coef', min_delta=0.001, patience=20, verbose=1, mode='max')
     # callbacks.append(model_early_stopping)
 
-    # Learning-rate scheduler.
-
     # Tensorboard logs.
     if args.debug != '':
         mkdir_s(args.debug)
