@@ -55,7 +55,7 @@ Also I have some simple script - `src/dataset/dataset.py` and `src/dataset/stsl-
 
 While I was working on **robin**, I constantly read some scientific articles. Here I give links to all of them.
 
-- [**DIBCO**](https://yadi.sk/d/2AQHWU0eFsyMvA) - 2009 - 2018 competition articles (I don't have 2017 article, if You have, please, contact me);
+- [**DIBCO**](https://yadi.sk/d/riAB5Fr4Tk5qPg) - 2009 - 2018 competition articles;
 - [**DIBCO metrics**](https://yadi.sk/d/fO3KN21inP662g) - articles about 2 non-standard DIBCO metrics: pseudo F-Measure and DRD (PSNR and F-Measure is realy easy to find on the Web);
 - [**U-net**](https://yadi.sk/i/5NligqxNbUPCYA) - articles about U-net convolutional network architecture; 
 - [**CTPN**](https://yadi.sk/i/oiPxuN_a2a02Eg) - articles about CTPN - fast neural network for finding text in images (My Neural Network doesn't use it, but it is great and I began my researches from it);
@@ -88,3 +88,8 @@ Training neural network is not cheap, because you need powerful GPU and CPU, so 
 
 ## Bugs
 - `Keras` has some problems with parallel data augmentation: it creates too many processes. I hope it will be fixed soon, but now it is better to use zero value of `--extraprocesses` flag (default value);
+
+## Many thanks to:
+
+- Igor Vishnyakov and Mikhail Pinchukov - my scientific directors;
+- Chen Jian - DIBCO 2017 article finder;
