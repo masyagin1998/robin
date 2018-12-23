@@ -82,7 +82,7 @@ def combine_imgs(imgs: [np.array], max_y: int, max_x: int) -> np.array:
 
 def preprocess_img(img: np.array) -> np.array:
     """Apply bilateral filter to image."""
-    img = cv2.bilateralFilter(img, 5, 50, 50)
+    #img = cv2.bilateralFilter(img, 5, 50, 50) TODO: change parameters.
     return img
 
 
@@ -114,9 +114,9 @@ def postprocess_img(img: np.array) -> np.array:
 
 def binarize_img(img: np.array, model, batchsize: int = 20) -> np.array:
     """Binarize image, using U-net, Otsu, bottom-hat transform etc."""
-    # img = preprocess_img(img)
+    img = preprocess_img(img)
     img = process_unet_img(img, model, batchsize)
-    #  img = postprocess_img(img)
+    img = postprocess_img(img)
     return img
 
 
