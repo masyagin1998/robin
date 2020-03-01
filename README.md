@@ -99,3 +99,9 @@ Training neural network is not cheap, because you need powerful GPU and CPU, so 
 
 - Igor Vishnyakov and Mikhail Pinchukov - my scientific directors;
 - Chen Jian - DIBCO 2017 article finder;
+
+## Referenced by:
+
+- [ICDAR 2019 Competition on Image Retrieval forHistorical Handwritten Documents](https://arxiv.org/pdf/1912.03713.pdf)
+- [Amandus Krantz. Cluster-based Sample Selection forDocument Image Binarization](http://www.diva-portal.org/smash/get/diva2:1335424/FULLTEXT02)
+- [Jakob Ahrneteg, Dean Kulenovic. Semantic Segmentation ofHistorical Document Images UsingRecurrent Neural Networks](https://pdfs.semanticscholar.org/2d1f/3795a650b56877044afb9248db65021df09d.pdf)
