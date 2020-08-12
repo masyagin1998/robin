@@ -4,4 +4,4 @@ opencv_python==3.4.3.18
 Keras==2.2.4
 imageio==2.4.1
 Augmentor==0.2.3
-Pillow==6.2.2
+Pillow>=7.1.0
