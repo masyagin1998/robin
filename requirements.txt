@@ -1,6 +1,6 @@
 numpy==1.14.5
 alt_model_checkpoint==1.0.1
-opencv_python==3.4.3.18
+opencv-python>=4.2.0.32
 Keras==2.2.4
 imageio==2.4.1
 Augmentor==0.2.3
