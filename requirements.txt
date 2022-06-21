@@ -1,4 +1,4 @@
-numpy==1.14.5
+numpy==1.22.0
 alt_model_checkpoint==1.0.1
 opencv-python>=4.2.0.32
 Keras==2.2.4
